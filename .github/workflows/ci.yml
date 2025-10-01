@@ -1,0 +1,66 @@
+# .github/workflows/ci.yml
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install Poetry
+        uses: abatilo/actions-poetry@v2
+        with:
+          poetry-version: "2.2.1"
+
+      - name: Configure Poetry (no venv)
+        run: poetry config virtualenvs.create false
+
+      - name: Cache deps
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/pypoetry
+            ~/.cache/pip
+          key: ${{ runner.os }}-poetry-${{ hashFiles('**/poetry.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-poetry-
+
+      - name: Install dependencies
+        run: poetry install --no-interaction --no-ansi
+
+      # Lint & type-check
+      - name: Ruff
+        run: poetry run ruff check .
+
+      - name: Mypy
+        run: poetry run mypy app
+
+      # Tests + coverage (force SQLite so we don't need Postgres)
+      - name: Pytest
+        env:
+          DATABASE_URL: sqlite+aiosqlite:///:memory:
+        run: poetry run pytest --maxfail=1 --disable-warnings -q
+
+      - name: Coverage (report + XML)
+        env:
+          DATABASE_URL: sqlite+aiosqlite:///:memory:
+        run: poetry run pytest --cov=app --cov-report=xml --cov-report=term-missing
+
+      - name: Upload coverage artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-xml
+          path: coverage.xml
