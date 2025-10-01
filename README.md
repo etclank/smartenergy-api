@@ -1,67 +1,33 @@
-# Project 1 – smartenergy-api
-## 1 · Purpose & elevator pitch
-A production-grade backend that ingests “smart-meter” energy readings, exposes them via REST, GraphQL, and WebSocket real-time feeds, and kicks off background analytics jobs.
-It demonstrates modern Python, async I/O, background processing, observability, and Azure-native deployment.
+# SmartEnergy API
 
-## 2 · Tech stack (locked to 2025 stable versions)
-| Layer              | Choice                                                                                                                                   | Notes                       |
-| ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------- | --------------------------- |
-| Runtime            | **Python 3.13**                                                                                                                          | asdf-managed                |
-| Web framework      | **FastAPI 0.115 +** ([github.com][1])                                                                                                    | OpenAPI docs auto-generated |
-| GraphQL            | **Strawberry 0.273 +** ([github.com][2])                                                                                                 | Single endpoint `/graphql`  |
-| DB                 | **Azure Database for PostgreSQL Flexible Server 15** (General-Purpose tier) ([learn.microsoft.com][3], [learn.microsoft.com][4])         | Async SQLAlchemy 2 ORM      |
-| Cache & queues     | **Azure Cache for Redis Enterprise 7** (in dev: Docker Redis)                                                                            |                             |
-| Background workers | Celery (**Redis broker**) + optional Dramatiq (feature flag)                                                                             |                             |
-| Auth               | JWT (PyJWT) with Azure AD B2C compatibility hook                                                                                         |                             |
-| Observability      | OpenTelemetry Python SDK → Azure Monitor & **Application Insights**                                                                      |                             |
-| Containers         | Multi-arch Buildx → **Azure Container Registry**                                                                                         |                             |
-| Orchestration      | **Azure Kubernetes Service** (AKS) via Helm chart                                                                                        |                             |
-| CI/CD              | GitHub Actions → OIDC deploy to ACR + AKS; preview envs in **Azure Container Apps** ([azure.microsoft.com][5], [azure.microsoft.com][6]) |                             |
+[![CI](https://github.com/etclank/smartenergy-api/actions/workflows/ci.yml/badge.svg)](https://github.com/etclank/smartenergy-api/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/etclank/smartenergy-api/branch/main/graph/badge.svg)](https://codecov.io/gh/etclank/smartenergy-api)
+[![Code style: Ruff](https://img.shields.io/badge/code%20style-ruff-000000.svg)](https://github.com/astral-sh/ruff)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
 
-[1]: https://github.com/fastapi/fastapi/releases?utm_source=chatgpt.com "Releases · fastapi/fastapi - GitHub"
-[2]: https://github.com/strawberry-graphql/strawberry/releases?utm_source=chatgpt.com "Releases · strawberry-graphql/strawberry - GitHub"
-[3]: https://learn.microsoft.com/en-us/azure/postgresql/flexible-server/concepts-compute?utm_source=chatgpt.com "Compute options - Azure Database for PostgreSQL flexible server"
-[4]: https://learn.microsoft.com/en-us/azure/postgresql/flexible-server/overview?utm_source=chatgpt.com "What Is Azure Database for PostgreSQL Flexible Server?"
-[5]: https://azure.microsoft.com/en-us/products/container-apps?utm_source=chatgpt.com "Azure Container Apps"
-[6]: https://azure.microsoft.com/updates?id=492133&utm_source=chatgpt.com "Azure updates | Microsoft Azure"
+A modern FastAPI + Postgres + Redis starter project.  
+It demonstrates async APIs, JWT authentication, caching, background tasks, containerization, and CI/CD with GitHub Actions.  
 
-## 3 · High-level architecture
-```bash
-┌─────────────┐   HTTP / WS   ┌──────────────┐
-│ React/PWA   │◀─────────────▶│ FastAPI REST │
-└─────────────┘               │  + GraphQL   │
-          ▲                   └──────┬───────┘
-          │  pub/sub (Redis)         │async SQLAlchemy
-┌─────────┴──────┐           ┌───────▼─────────┐
-│ Background     │           │ PostgreSQL 15   │
-│  Worker Pool   │           └─────────────────┘
-└──────┬─────────┘                  ▲
-       │ OTEL                       │ Change data capture (future)
-┌──────▼─────────┐           ┌──────┴─────────┐
-│ Azure Monitor  │◀──────────┤  OpenTelemetry │
-└────────────────┘           └────────────────┘
-```
-(Final repo will include a Mermaid/PlantUML source + PNG.)
+This repo is the foundation for larger projects (like a production-grade “Smart Energy” backend) while staying lightweight enough for demos and portfolio use.
 
-## 4 · Functional scope
-| Epic                  | End-points / Tasks                                                        | Done-when                          |
-| --------------------- | ------------------------------------------------------------------------- | ---------------------------------- |
-| **Meter CRUD**        | `GET /meters`, `POST /meters`, `GET /meters/{id}`                         | unit + integration tests pass      |
-| **Readings ingest**   | `POST /readings` bulk & single; GraphQL mutation `addReading`             | handles 5 k req/s in k6 test       |
-| **Query feeds**       | GraphQL query `latestReadings(meterId)`; WS topic `/ws/stream/{meterId}`  | < 200 ms p99 latency locally       |
-| **Background jobs**   | Celery task `compute_daily_stats(meter_id, date)`                         | Redis/Queue metrics exported       |
-| **Auth & rate-limit** | JWT bearer; 100 req/min per user via FastAPI-Limiter                      | returns RFC 6586 errors            |
-| **Observability**     | OTEL traces & Prom metrics visible in Azure Portal dashboard              | Grafana panel screenshot in README |
-| **Docs & SDK**        | Auto-generated OpenAPI; `npx openapi-typescript` script to emit TS client | README badge links to docs site    |
+---
 
-## 5 · Non-functional requirements
-- Performance: sustain 5 k rps ingest, 50 ms p95 DB latency, 0 data loss in Redis.
-- Security: OWASP ASVS L1; CodeQL & Trivy scans block PR merge on critical.
-- Portability: docker compose up works on macOS (Apple silicon) & CI amd64.
-- Reliability: 99.5 % uptime SLO in AKS; readiness/liveness probes for all pods.
-- Cost ceiling (dev): ≤ $50 / month using Azure Postgres Burstable tier + free Redis dev cache.
+## 🚀 Tech Stack (2025)
 
-## 6 · Directory outline
+| Layer        | Choice                                       | Notes                                   |
+| ------------ | -------------------------------------------- | --------------------------------------- |
+| Runtime      | **Python 3.13**                              | Poetry-managed dependencies             |
+| Web API      | **FastAPI 0.115+**                           | Async REST endpoints, auto Swagger/Redoc |
+| DB           | **PostgreSQL (Neon free tier)**              | Async SQLAlchemy 2.0 ORM + Alembic      |
+| Cache        | **Redis (Upstash free tier)**                | Used for caching/rate-limits            |
+| Auth         | JWT (python-jose)                            | One public + one protected route        |
+| Containers   | Docker / docker-compose                      | Dev: API + Postgres + Redis             |
+| CI/CD        | GitHub Actions                               | Ruff lint, mypy type check, pytest + coverage |
+
+---
+
+## 🗂️ Project Structure
+
 ```bash
 .
 ├── README.md
@@ -73,25 +39,24 @@ It demonstrates modern Python, async I/O, background processing, observability, 
 │   ├── __init__.py
 │   ├── main.py
 │   ├── config.py              # pydantic-settings: DB/Redis/JWT/ENV flags
-│   ├── db.py                  # async SQLAlchemy engine/session for Postgres
+│   ├── db.py                  # async SQLAlchemy engine/session
 │   ├── deps.py                # FastAPI Depends (db session, auth)
-│   ├── security.py            # JWT utils (create/verify tokens), password hashing
-│   ├── cache.py               # Redis client + helpers
+│   ├── security.py            # JWT utils
 │   ├── api/
-│   │   ├── routers.py         # include_router here
-│   │   ├── auth.py            # /auth/login (JWT), /auth/refresh (optional)
-│   │   ├── health.py          # /healthz (public), /readyz, /metrics (optional)
-│   │   ├── meters.py          # sample resource; GET uses Redis cache
-│   │   └── schemas.py         # Pydantic models (Meter, Auth tokens, etc.)
+│   │   ├── routers.py         # include_router hub
+│   │   ├── auth.py            # /auth/login, /auth/me
+│   │   ├── health.py          # /healthz
+│   │   ├── meters.py          # CRUD for meters
+│   │   └── schemas.py         # Pydantic models
 │   ├── models/
-│   │   └── meter.py           # SQLAlchemy models (Meter)
-│   ├── tasks/                 # (optional) background tasks
-│   └── telemetry.py           # (optional) OTEL hooks
-├── chart/                     # (optional) Helm, keep as-is for later
+│   │   └── meter.py           # SQLAlchemy model
+│   ├── tasks/                 # (future) background tasks
+│   └── telemetry.py           # (future) observability hooks
+├── chart/
 │   └── templates/
 ├── docker/
 │   └── Dockerfile
-├── docker-compose.yml         # dev: api+postgres+redis
+├── docker-compose.yml
 ├── pyproject.toml
 ├── poetry.lock
 └── tests/
@@ -99,34 +64,53 @@ It demonstrates modern Python, async I/O, background processing, observability, 
     ├── test_auth.py
     └── test_meters.py
 ```
+## 🧪 Quick Start
+### Run locally
+```bash
+poetry install
+poetry run uvicorn app.main:app --reload
+```
 
-## 7 · CI/CD flow
-1. Push / PR
-- test.yml – matrix (ubuntu-22.04, macos-14) → Ruff, mypy, pytest, coverage.
-- Build multi-arch image, push to temporary ACR repo.
-2. Merge to main
-- deploy-aks.yml – OIDC login to Azure, helm upgrade smartenergy-api in AKS dev namespace.
-- Tag vX.Y.Z triggers GitHub Release; semantic-release updates changelog.
-3. Preview environments
-- Each PR auto-deploys to Azure Container Apps with {pr-number} suffix hostname; comment bot posts URL.
+Docs available at:
+- Swagger → http://127.0.0.1:8000/docs
+- ReDoc → http://127.0.0.1:8000/redoc
 
-## 8 · Definition of Done checklist All epics complete & tested (≥ 90 % coverage).
-- [ ] Helm chart passes helm lint and deploys cleanly to AKS dev cluster.
-- [ ] README: elevator pitch, quick-start, architecture diagram, badges (build, codecov, container size, release).
-- [ ] Loom / GIF demo linked at top of README (< 90 s).
-- [ ] Cost sheet (docs/cost.md) listing dev/prod Azure SKUs & monthly estimate.
-- [ ] v1.0.0 GitHub Release with SBOM (Syft) attached.
+### With Docker Compose
+```bash
+docker compose up --build
+```
+This starts:
+- API at http://localhost:8000
+- Postgres on port 5432
+- Redis on port 6379
 
-## 9 · Suggested first 10 daily tasks (≈ 2 weeks)
-| Day | 1-hour task                                                                       |
-| --- | --------------------------------------------------------------------------------- |
-| D1  | Create repo, add `.tool-versions`, initialise Poetry / Pip-tools.                 |
-| D2  | Scaffold `main.py`, health check route, run locally.                              |
-| D3  | Write multi-stage Dockerfile, `docker compose up` with Postgres & Redis services. |
-| D4  | Add GitHub Action `test.yml` with pytest boilerplate.                             |
-| D5  | Push initial commit; ensure CI badge green.                                       |
-| D6  | Design DB schema (Meter, Reading) in SQLModel / SQLAlchemy; alembic revision.     |
-| D7  | Implement CRUD router `/meters`; unit tests.                                      |
-| D8  | Add Strawberry GraphQL schema & playground; query `meters`.                       |
-| D9  | Configure OTEL exporter → stdout; view traces in Jaeger docker.                   |
-| D10 | Draft README skeleton + architecture Mermaid diagram.                             |
+### Run tests
+```bash
+poetry run pytest --maxfail=1 --disable-warnings -q
+```
+
+## ✅ Features (Definition of Done for starter)
+
+- [x] Health endpoint (/healthz)
+- [x] JWT auth (/auth/login, /auth/me)
+- [x] CRUD resource: /meters
+- [x] Async SQLAlchemy + Alembic migrations
+- [x] Redis cache placeholder (future: rate limit)
+- [x] Docker + docker-compose for dev
+- [x] Pytest suite (unit & integration)
+- [x] GitHub Actions CI (lint, type, test, coverage badge)
+- [] “Deploy to Render” badge + hosted demo
+
+## Next Steps
+- Add Redis-backed rate limiting (FastAPI-Limiter).
+- Add background task example (Celery or FastAPI BackgroundTasks).
+- Set up Render free service deployment + “Deploy to Render” badge in README.
+- Extend tests to cover auth edge cases and Redis caching.
+- Add code coverage + status badges (Codecov/GitHub).
+
+## 🔗 Links
+- Swagger Docs → http://localhost:8000/docs
+ (local)
+- GitHub Actions → Actions tab
+- Postgres → Neon free tier
+- Redis → Upstash free tier
