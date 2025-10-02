@@ -42,5 +42,5 @@ app.mount("/site", StaticFiles(directory="site", html=True), name="site")
 
 
 @app.get("/", include_in_schema=False)
-async def root():
+async def root() -> RedirectResponse:
     return RedirectResponse(url="/site/")
