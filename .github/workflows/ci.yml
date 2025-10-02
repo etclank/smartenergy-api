@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [ main ]
+    branches: [main]
   pull_request:
-    branches: [ main ]
+    branches: [main]
 
 jobs:
   ci:
@@ -27,7 +27,7 @@ jobs:
       - name: Configure Poetry (no venv)
         run: poetry config virtualenvs.create false
 
-      - name: Cache deps
+      - name: Cache dependencies
         uses: actions/cache@v4
         with:
           path: |
