@@ -7,21 +7,20 @@ from alembic import context
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import AsyncEngine
 
-# Interpret the config file for Python logging.
+# Import app engine & metadata BEFORE any other top-level code (satisfies E402)
+from app.db import Base as TargetBase
+from app.db import engine as app_engine
+
+# --- Alembic config & logging
 config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
-
-# Import your app engine and metadata at module import time (keeps Ruff/E402 happy)
-from app.db import engine as app_engine  # AsyncEngine
-from app.db import Base as TargetBase
 
 target_metadata = TargetBase.metadata
 
 
 def run_migrations_offline() -> None:
-    """Run migrations in 'offline' mode."""
-    # Use the URL from the app's engine
+    """Run migrations in 'offline' mode'."""
     url = str(app_engine.url)
     context.configure(
         url=url,
@@ -35,7 +34,7 @@ def run_migrations_offline() -> None:
 
 
 def do_run_migrations(connection: Connection) -> None:
-    """Run migrations given a synchronous connection (called via run_sync)."""
+    """Run migrations with a synchronous connection (called via run_sync)."""
     context.configure(
         connection=connection,
         target_metadata=target_metadata,
@@ -48,10 +47,8 @@ def do_run_migrations(connection: Connection) -> None:
 async def run_migrations_online() -> None:
     """Run migrations in 'online' mode using the app's AsyncEngine."""
     connectable: AsyncEngine = app_engine
-
     async with connectable.connect() as connection:
         await connection.run_sync(do_run_migrations)
-
     await connectable.dispose()
 
 
