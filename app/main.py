@@ -5,6 +5,9 @@ from fastapi import FastAPI
 from app.api.routers import api
 from app.cache import get_redis, close_redis
 
+from fastapi.middleware.cors import CORSMiddleware
+from app.config import settings
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
@@ -20,6 +23,16 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 
 app = FastAPI(title="SmartEnergy API", version="0.1.0", lifespan=lifespan)
+
+if settings.frontend_origins:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=settings.frontend_origins,
+        allow_credentials=False,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+
 app.include_router(api)
 
 

@@ -1,0 +1,64 @@
+:root {
+  --bg: #0b0d12;
+  --panel: #141824;
+  --text: #e9ecf1;
+  --muted: #9aa4b2;
+  --accent: #5cc8ff;
+  --good: #2e7d32;
+  --warn: #8a5200;
+  --bad: #8a0000;
+  --border: #1f2433;
+}
+
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial;
+  color: var(--text);
+  background: linear-gradient(180deg, #0b0d12 0%, #0e1322 100%);
+  min-height: 100vh;
+}
+
+.topbar {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 16px 20px; background: rgba(20,24,36,.7); backdrop-filter: blur(6px);
+  border-bottom: 1px solid var(--border);
+}
+h1 { margin: 0; font-weight: 650; letter-spacing: .1px; }
+
+.container { margin: 24px auto; max-width: 860px; padding: 0 16px; }
+
+.badge {
+  padding: 4px 8px; border-radius: 10px; font-size: 12px;
+  background: #22283a; color: var(--muted); border: 1px solid var(--border);
+}
+.badge-live { background: rgba(46,125,50,.15); color: #b8f0c0; border-color: rgba(46,125,50,.4); }
+.badge-mock { background: rgba(138,82,0,.15); color: #ffd6a1; border-color: rgba(138,82,0,.4); }
+.badge-error { background: rgba(138,0,0,.15); color: #ffb3b3; border-color: rgba(138,0,0,.4); }
+
+.nav { list-style: none; padding: 0; display: flex; gap: 12px; }
+.nav a { color: var(--accent); text-decoration: none; }
+.nav a:hover { text-decoration: underline; }
+
+.row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+input[type="text"] { padding: 6px 8px; min-width: 320px; border-radius: 8px; border: 1px solid var(--border); background: #0f1422; color: var(--text); }
+
+.meters { list-style: none; padding: 0; margin: 0; }
+.meter-row {
+  padding: 12px 14px; margin: 8px 0; border: 1px solid var(--border);
+  background: rgba(20,24,36,.65); border-radius: 12px;
+}
+.meter-row a { color: var(--text); text-decoration: none; }
+.meter-row a:hover { text-decoration: underline; }
+
+.empty, .error { color: var(--muted); font-style: italic; padding: 12px; }
+
+.card {
+  display: grid;
+  grid-template-columns: 160px 1fr;
+  gap: 8px 12px;
+  padding: 16px; border: 1px solid var(--border);
+  background: rgba(20,24,36,.65); border-radius: 12px;
+}
+.card .k { color: var(--muted); }
+.card .v { color: var(--text); }

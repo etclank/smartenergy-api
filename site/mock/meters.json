@@ -1,0 +1,5 @@
+[
+  { "id": 1, "name": "Lab Main Meter", "location": "R&D Lab" },
+  { "id": 2, "name": "Warehouse Feed", "location": "Building B" },
+  { "id": 3, "name": "Office Wing A", "location": "HQ" }
+]

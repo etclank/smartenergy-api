@@ -41,3 +41,6 @@ app.db
 # IDE
 .vscode/
 .idea/
+
+# static
+site/dist/
