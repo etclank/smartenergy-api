@@ -8,8 +8,6 @@
 A modern FastAPI + Postgres + Redis starter project.  
 It demonstrates async APIs, JWT authentication, caching, background tasks, containerization, and CI/CD with GitHub Actions.  
 
-This repo is the foundation for larger projects (like a production-grade “Smart Energy” backend) while staying lightweight enough for demos and portfolio use.
-
 ---
 
 ## 🚀 Tech Stack (2025)
