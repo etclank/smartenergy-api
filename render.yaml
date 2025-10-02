@@ -1,0 +1,26 @@
+# render.yaml
+services:
+  - type: web
+    name: smartenergy-api
+    env: docker
+    plan: free
+    # pick a region close to you; options include oregon, frankfurt, singapore
+    region: frankfurt
+    healthCheckPath: /healthz
+    autoDeploy: true
+    dockerfilePath: ./docker/Dockerfile
+    # Render injects PORT; our Dockerfile will respect it
+    envVars:
+      - key: ENV
+        value: prod
+      # Set these in Render Dashboard or via 'render.yaml' PR secrets
+      - key: DATABASE_URL
+        # example Neon: postgresql+psycopg://USER:PASS@HOST/db
+        # leave empty here; set in Render dashboard
+        value: ""
+      - key: REDIS_URL
+        # optional; Upstash rediss://:PASS@HOST:PORT
+        value: ""
+      - key: JWT_SECRET
+        # set a strong secret in the dashboard
+        value: ""

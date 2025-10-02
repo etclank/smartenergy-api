@@ -1,29 +1,17 @@
-# VCS
 .git
 .gitignore
-
-# Python bytecode
-**/__pycache__/
-**/*.py[cod]
-
-# Local env/secrets
-.env
-.env.*
-!.env.example
-
-# Tool caches & reports
-.pytest_cache/
+__pycache__/
+*.py[cod]
+*.pyo
+*.so
 .mypy_cache/
 .ruff_cache/
-.coverage
+.pytest_cache/
+.env
+.env.*
+*.db
+app.db
 coverage.xml
-htmlcov/
-reports/
-
-# Not needed at runtime
-docs/
+alembic/**/__pycache__/
+alembic/versions/**/__pycache__/
 tests/
-.github/
-chart/
-docker-compose.yml
-Jenkinsfile

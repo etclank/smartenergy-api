@@ -1,33 +1,43 @@
+# OS
+.DS_Store
+
 # Python
 __pycache__/
 *.py[cod]
 *.pyo
-*.pyd
+*.so
 
-# Envs & secrets
-.env
-.env.*
-!.env.example
+# Virtual envs
 .venv/
-.venv*/
+venv/
+env/
 
-# Tool caches
-.pytest_cache/
+# Tooling caches
 .mypy_cache/
 .ruff_cache/
+.pytest_cache/
 
-# Coverage & reports
+# Coverage
 .coverage
-coverage.xml
 htmlcov/
-reports/
+coverage.xml
 
-# Build / dist
+# Builds
 build/
 dist/
-*.egg-info/
 
-# OS / editors
-.DS_Store
-.idea/
+# Alembic caches
+alembic/**/__pycache__/
+alembic/versions/**/__pycache__/
+
+# Local databases
+*.db
+app.db
+
+# Env files (keep example committed)
+.env
+.env.*
+
+# IDE
 .vscode/
+.idea/

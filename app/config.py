@@ -14,6 +14,9 @@ class Settings(BaseSettings):
     database_url: str = Field(default="", validation_alias=AliasChoices("DATABASE_URL"))
     redis_url: str = Field(default="", validation_alias=AliasChoices("REDIS_URL"))
 
+    # Cache
+    cache_ttl_seconds: int = 60
+
     # JWT
     jwt_secret: str = Field(default="", validation_alias=AliasChoices("JWT_SECRET"))
     jwt_alg: str = Field(default="HS256", validation_alias=AliasChoices("JWT_ALG"))
