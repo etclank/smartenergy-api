@@ -27,7 +27,7 @@ app = FastAPI(title="SmartEnergy API", version="0.1.0", lifespan=lifespan)
 if settings.frontend_origins:
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=settings.frontend_origins,
+        allow_origins=settings.frontend_origins or ["*"],
         allow_credentials=False,
         allow_methods=["*"],
         allow_headers=["*"],

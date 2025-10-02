@@ -4,23 +4,36 @@ services:
     name: smartenergy-api
     env: docker
     plan: free
-    # pick a region close to you; options include oregon, frankfurt, singapore
     region: frankfurt
     healthCheckPath: /healthz
     autoDeploy: true
     dockerfilePath: ./docker/Dockerfile
-    # Render injects PORT; our Dockerfile will respect it
     envVars:
       - key: ENV
         value: prod
-      # Set these in Render Dashboard or via 'render.yaml' PR secrets
+
+      # --- Choose ONE of these database configs ---
+
+      # A) Easy first deploy (stateless; data resets on redeploy):
+      # value: "sqlite+aiosqlite:///tmp/app.db"
+
+      # B) Proper database (Render Postgres or Neon):
+      # e.g. postgresql+asyncpg://USER:PASSWORD@HOST:5432/DBNAME
       - key: DATABASE_URL
-        # example Neon: postgresql+psycopg://USER:PASS@HOST/db
-        # leave empty here; set in Render dashboard
-        value: ""
+        value: "sqlite+aiosqlite:///tmp/app.db"
+
+      # Optional Redis (Upstash or Render Redis)
       - key: REDIS_URL
-        # optional; Upstash rediss://:PASS@HOST:PORT
         value: ""
+
+      # Auth
       - key: JWT_SECRET
-        # set a strong secret in the dashboard
+        generateValue: true
+      - key: JWT_ALG
+        value: HS256
+      - key: JWT_EXPIRE_MINUTES
+        value: "60"
+
+      # CORS (comma-separated if multiple)
+      - key: FRONTEND_ORIGINS
         value: ""

@@ -190,6 +190,18 @@ poetry run alembic upgrade head
 poetry run alembic revision -m "add something"
 poetry run alembic upgrade head
 ```
+
+### Local test of image:
+```bash
+docker build -t smartenergy-api -f docker/Dockerfile .
+docker run --rm -p 8000:8000 \
+  -e ENV=prod \
+  -e DATABASE_URL=sqlite+aiosqlite:///tmp/app.db \
+  -e JWT_SECRET=localsecret \
+  smartenergy-api
+
+```
+
 ### 🧱 CI
 - Workflow: .github/workflows/ci.yml
 - Steps: checkout → setup Python → Poetry install → Ruff → mypy → pytest (+ coverage)
