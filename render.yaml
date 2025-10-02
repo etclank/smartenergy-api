@@ -15,12 +15,12 @@ services:
       # --- Choose ONE of these database configs ---
 
       # A) Easy first deploy (stateless; data resets on redeploy):
-      # value: "sqlite+aiosqlite:///tmp/app.db"
+      # value: "sqlite+aiosqlite:////tmp/app.db"
 
       # B) Proper database (Render Postgres or Neon):
       # e.g. postgresql+asyncpg://USER:PASSWORD@HOST:5432/DBNAME
       - key: DATABASE_URL
-        value: "sqlite+aiosqlite:///tmp/app.db"
+        value: "sqlite+aiosqlite:////tmp/app.db"
 
       # Optional Redis (Upstash or Render Redis)
       - key: REDIS_URL
