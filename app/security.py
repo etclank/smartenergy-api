@@ -1,7 +1,14 @@
 from datetime import datetime, timedelta, timezone
 from jose import jwt
 from passlib.context import CryptContext
+from fastapi import HTTPException, status
 from app.config import settings
+
+if not settings.jwt_secret:
+    raise HTTPException(
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        detail="JWT_SECRET is not configured",
+    )
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
