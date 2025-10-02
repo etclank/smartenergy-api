@@ -61,3 +61,6 @@ jobs:
         with:
           name: coverage-xml
           path: coverage.xml
+
+      - name: Mypy
+        run: poetry run mypy --config-file mypy.ini app
