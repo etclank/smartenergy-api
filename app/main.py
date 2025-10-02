@@ -6,5 +6,6 @@ app = FastAPI(title="SmartEnergy API", version="0.1.0")
 app.include_router(api)
 
 @app.get("/")
-async def root():
+async def root() -> dict[str, str]:
     return {"status": "ok", "docs": "/docs", "redoc": "/redoc"}
+

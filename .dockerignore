@@ -1,8 +1,29 @@
-__pycache__/
-*.pyc
-*.pyo
-*.pyd
-.env
-poetry.lock
-venv/
+# VCS
 .git
+.gitignore
+
+# Python bytecode
+**/__pycache__/
+**/*.py[cod]
+
+# Local env/secrets
+.env
+.env.*
+!.env.example
+
+# Tool caches & reports
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+htmlcov/
+reports/
+
+# Not needed at runtime
+docs/
+tests/
+.github/
+chart/
+docker-compose.yml
+Jenkinsfile
