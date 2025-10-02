@@ -6,6 +6,8 @@ from app.api.routers import api
 from app.cache import get_redis, close_redis
 
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import RedirectResponse
 from app.config import settings
 
 
@@ -35,7 +37,10 @@ if settings.frontend_origins:
 
 app.include_router(api)
 
+# Serve the static demo site
+app.mount("/site", StaticFiles(directory="site", html=True), name="site")
 
-@app.get("/")
-async def root() -> dict[str, str]:
-    return {"status": "ok", "docs": "/docs", "redoc": "/redoc"}
+
+@app.get("/", include_in_schema=False)
+async def root():
+    return RedirectResponse(url="/site/")
