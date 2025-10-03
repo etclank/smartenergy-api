@@ -53,7 +53,7 @@
         try { return await req("meters/"); } 
         catch (e) { console.warn("metersList live failed, falling back to mock:", e); }
       }
-      const r = await fetch("/mock/meters.json", { cache: "no-store" });
+      const r = await fetch("site/mock/meters.json", { cache: "no-store" });
       if (!r.ok) throw new Error(`mock HTTP ${r.status}`);
       return r.json();
     },

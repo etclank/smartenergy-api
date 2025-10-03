@@ -1,24 +1,37 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1"/>
-  <title>SmartEnergy — Meter</title>
-  <link rel="icon" href="/favicon.svg" type="image/svg+xml"/>
-  <link rel="stylesheet" href="/assets/css/style.css"/>
-  <script defer src="/assets/config.js"></script>
-  <script defer src="/assets/js/api.js"></script>
+  <meta charset="utf-8" />
+  <title>SmartEnergy – Meter</title>
+
+  <!-- Resolve all relative URLs under /site -->
+  <base href="/site/">
+
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="icon" href="favicon.svg" />
+  <link rel="stylesheet" href="assets/css/style.css" />
+
+  <script src="assets/config.js"></script>
+  <script>
+    // Minimal inline script: show the meter id from the querystring
+    window.addEventListener("DOMContentLoaded", () => {
+      const p = new URLSearchParams(window.location.search);
+      const id = p.get("id") || "(unknown)";
+      document.getElementById("meter-id").textContent = id;
+    });
+  </script>
 </head>
 <body>
   <div class="topbar">
-    <h1>Meter</h1>
+    <h1>SmartEnergy</h1>
     <ul class="nav">
-      <li><a href="/pages/meters.html">Back to Meters</a></li>
+      <li><a href="pages/meters.html">Back to Meters</a></li>
     </ul>
   </div>
 
-  <div class="container" id="meter-detail">
-    Loading…
+  <div class="container">
+    <h2>Meter <span id="meter-id"></span></h2>
+    <p class="muted">Example details page. (Optional: extend your JS to fetch <code>/meters/{id}</code>.)</p>
   </div>
 </body>
 </html>

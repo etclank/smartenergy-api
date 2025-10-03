@@ -1,37 +1,32 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1"/>
-  <title>SmartEnergy — Home</title>
-  <link rel="icon" href="/favicon.svg" type="image/svg+xml"/>
-  <link rel="stylesheet" href="/assets/css/style.css"/>
-  <script defer src="/assets/config.js"></script>
-  <script defer src="/assets/js/api.js"></script>
+  <meta charset="utf-8" />
+  <title>SmartEnergy – Home</title>
+
+  <!-- Resolve all relative URLs under /site -->
+  <base href="/site/">
+
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="icon" href="favicon.svg" />
+  <link rel="stylesheet" href="assets/css/style.css" />
+
+  <script src="assets/config.js"></script>
+  <script src="assets/js/api.js" defer></script>
 </head>
 <body>
   <div class="topbar">
-    <h1>⚡ SmartEnergy API</h1>
+    <h1>SmartEnergy</h1>
     <ul class="nav">
-      <li><a href="/pages/meters.html">Meters</a></li>
-      <li><a id="openDocs" target="_blank" rel="noopener">Swagger</a></li>
-      <li><a id="openRedoc" target="_blank" rel="noopener">ReDoc</a></li>
+      <li><a href="pages/meters.html">Meters</a></li>
+      <li><a href="/docs" target="_blank" rel="noopener">Swagger</a></li>
+      <li><a href="/redoc" target="_blank" rel="noopener">ReDoc</a></li>
     </ul>
   </div>
 
   <div class="container">
-    <div class="row" style="gap:10px">
-      <span id="health" class="badge">checking API…</span>
-      <span id="cache" class="badge">checking Redis…</span>
-      <span id="whoAmI" class="badge" title="Shows if token in localStorage"></span>
-    </div>
-
-    <div class="row" style="margin-top:16px">
-      <label for="apiBase">API base:</label>
-      <input id="apiBase" type="text"/>
-      <button id="saveApiBase" class="badge">Save</button>
-      <span class="badge">Tip: add <code>?mock=1</code> to force mock</span>
-    </div>
+    <p>Welcome! Explore the demo data and API docs.</p>
+    <p class="badge">Static site served at <code>/site</code></p>
   </div>
 </body>
 </html>
