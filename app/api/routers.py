@@ -1,4 +1,3 @@
-# app/api/routers.py
 from fastapi import APIRouter
 from . import health, auth, meters
 
