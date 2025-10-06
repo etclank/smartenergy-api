@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>SmartEnergy – Home</title>
+  <title>SmartEnergy – Meters</title>
 
   <!-- Resolve all relative URLs under /site -->
   <base href="/site/">
@@ -18,15 +18,18 @@
   <div class="topbar">
     <h1>SmartEnergy</h1>
     <ul class="nav">
-      <li><a href="pages/meters.html">Meters</a></li>
+      <li><a href="/site/pages/meters.html" aria-current="page">Meters</a></li>
       <li><a href="/docs" target="_blank" rel="noopener">Swagger</a></li>
       <li><a href="/redoc" target="_blank" rel="noopener">ReDoc</a></li>
     </ul>
   </div>
 
   <div class="container">
-    <p>Welcome! Explore the demo data and API docs.</p>
-    <p class="badge">Static site served at <code>/site</code></p>
+    <h2>Meters</h2>
+    <p id="demo-banner" class="badge">Loading…</p>
+    <ul id="meters-list">
+      <li class="loading">Loading meters…</li>
+    </ul>
   </div>
 </body>
 </html>

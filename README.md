@@ -127,15 +127,47 @@ Docs available at:
 - Swagger → http://127.0.0.1:8000/docs
 - ReDoc → http://127.0.0.1:8000/redoc
 
-### Option B — Docker Compose (API + Postgres + Redis)
+### Option B — 🐋 Local Docker Workflow (Makefile)
+**Build the Docker image**
 ```bash
-docker compose up --build
+make build
+```
+**Run container interactively (SQLite in image)**
+```bash
+make up
+```
+**Run container with explicit database URL and JWT secret**
+```bash
+make up DATABASE_URL="sqlite+aiosqlite:////tmp/app.db" JWT_SECRET=dev
+```
+**Stop and remove the background container**
+```bash
+make stop
+```
+**Follow logs**
+```bash
+make logs
+```
+**Open a shell inside the running container**
+```bash
+make sh
+```
+**Run a quick smoke test (healthz, site, meters)**
+```bash
+make smoke
+```
+**Create a demo meter**
+```bash
+make seed
+```
+### 🧱 Full Stack (Docker Compose)
+```bash
+make compose-up
+# then open http://localhost:8000
+make compose-down
 ```
 
-### With Docker Compose
-```bash
-docker compose up --build
-```
+For Postgres + Redis + API, use:
 - API → http://localhost:8000
 - Postgres → localhost:5432 (from Compose)
 - Redis → localhost:6379 (optional)
@@ -199,7 +231,6 @@ docker run --rm -p 8000:8000 \
   -e DATABASE_URL=sqlite+aiosqlite:///tmp/app.db \
   -e JWT_SECRET=localsecret \
   smartenergy-api
-
 ```
 
 ### 🧱 CI

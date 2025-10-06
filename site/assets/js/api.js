@@ -53,7 +53,7 @@
         try { return await req("meters/"); } 
         catch (e) { console.warn("metersList live failed, falling back to mock:", e); }
       }
-      const r = await fetch("site/mock/meters.json", { cache: "no-store" });
+      const r = await fetch("mock/meters.json", { cache: "no-store" });
       if (!r.ok) throw new Error(`mock HTTP ${r.status}`);
       return r.json();
     },
@@ -122,7 +122,7 @@
           const li = document.createElement("li");
           li.className = "meter-row";
           const link = document.createElement("a");
-          link.href = `/pages/meter.html?id=${encodeURIComponent(m.id)}`;
+          link.href = `pages/meter.html?id=${encodeURIComponent(m.id)}`;
           link.textContent = `${m.name} — ${m.location || ""}`;
           li.appendChild(link);
           list.appendChild(li);
