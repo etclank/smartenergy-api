@@ -1,0 +1,55 @@
+<mxfile host="65bd71144e">
+    <diagram id="8veynPXo4ZQENYFpeblk" name="SmartEnergy DB Model">
+        <mxGraphModel dx="951" dy="1566" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="827" pageHeight="1169" math="0" shadow="0">
+            <root>
+                <mxCell id="0"/>
+                <mxCell id="1" parent="0"/>
+                <mxCell id="2" value="USERS&#xa;id PK:int&#xa;username:str&#xa;email:str" style="shape=table;whiteSpace=wrap;html=1;container=1;recursiveResize=0;rounded=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=13;fontStyle=1" vertex="1" parent="1">
+                    <mxGeometry x="60" y="60" width="160" height="100" as="geometry"/>
+                </mxCell>
+                <mxCell id="3" value="SITES&#xa;id PK:int&#xa;name:str&#xa;location:str&#xa;user_id FK:int" style="shape=table;whiteSpace=wrap;html=1;container=1;recursiveResize=0;rounded=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=13;fontStyle=1" vertex="1" parent="1">
+                    <mxGeometry x="320" y="60" width="170" height="110" as="geometry"/>
+                </mxCell>
+                <mxCell id="4" value="METERS&#xa;id PK:int&#xa;serial_number:str&#xa;type:str&#xa;site_id FK:int" style="shape=table;whiteSpace=wrap;html=1;container=1;recursiveResize=0;rounded=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=13;fontStyle=1" vertex="1" parent="1">
+                    <mxGeometry x="610" y="60" width="180" height="110" as="geometry"/>
+                </mxCell>
+                <mxCell id="5" value="TARIFFS&#xa;id PK:int&#xa;name:str&#xa;price_per_kwh:float&#xa;site_id FK:int" style="shape=table;whiteSpace=wrap;html=1;container=1;recursiveResize=0;rounded=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=13;fontStyle=1" vertex="1" parent="1">
+                    <mxGeometry x="320" y="240" width="180" height="110" as="geometry"/>
+                </mxCell>
+                <mxCell id="6" value="IMPORTED_ENERGY&#xa;id PK:int&#xa;timestamp:datetime&#xa;measure_value:float&#xa;period:str&#xa;meter_id FK:int" style="shape=table;whiteSpace=wrap;html=1;container=1;recursiveResize=0;rounded=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=13;fontStyle=1" vertex="1" parent="1">
+                    <mxGeometry x="920" y="20" width="200" height="120" as="geometry"/>
+                </mxCell>
+                <mxCell id="7" value="EXPORTED_ENERGY&#xa;id PK:int&#xa;timestamp:datetime&#xa;measure_value:float&#xa;period:str&#xa;meter_id FK:int" style="shape=table;whiteSpace=wrap;html=1;container=1;recursiveResize=0;rounded=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=13;fontStyle=1" vertex="1" parent="1">
+                    <mxGeometry x="920" y="180" width="200" height="120" as="geometry"/>
+                </mxCell>
+                <mxCell id="8" value="REACTIVE_ENERGY&#xa;id PK:int&#xa;timestamp:datetime&#xa;imported_kvarh:float&#xa;exported_kvarh:float&#xa;meter_id FK:int" style="shape=table;whiteSpace=wrap;html=1;container=1;recursiveResize=0;rounded=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=13;fontStyle=1" vertex="1" parent="1">
+                    <mxGeometry x="920" y="340" width="200" height="120" as="geometry"/>
+                </mxCell>
+                <mxCell id="9" value="MAX_POWER&#xa;id PK:int&#xa;timestamp:datetime&#xa;measure_value:float&#xa;meter_id FK:int" style="shape=table;whiteSpace=wrap;html=1;container=1;recursiveResize=0;rounded=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=13;fontStyle=1" vertex="1" parent="1">
+                    <mxGeometry x="920" y="500" width="200" height="100" as="geometry"/>
+                </mxCell>
+                <mxCell id="10" style="endArrow=classic;endFill=1;strokeWidth=2;strokeColor=#333333;entryX=0;entryY=0.5;exitX=1;exitY=0.5;" edge="1" parent="1" source="2" target="3">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="11" style="endArrow=classic;endFill=1;strokeWidth=2;strokeColor=#333333;entryX=0;entryY=0.5;exitX=1;exitY=0.5;" edge="1" parent="1" source="3" target="4">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="12" style="endArrow=classic;endFill=1;strokeWidth=2;strokeColor=#333333;entryX=0.5;entryY=0;exitX=0.5;exitY=1;" edge="1" parent="1" source="3" target="5">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="13" style="endArrow=classic;strokeColor=#333333;endFill=1;" edge="1" parent="1" source="4" target="6">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="14" style="endArrow=classic;strokeColor=#333333;endFill=1;" edge="1" parent="1" source="4" target="7">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="15" style="endArrow=classic;strokeColor=#333333;endFill=1;" edge="1" parent="1" source="4" target="8">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="16" style="endArrow=classic;strokeColor=#333333;endFill=1;" edge="1" parent="1" source="4" target="9">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+            </root>
+        </mxGraphModel>
+    </diagram>
+</mxfile>

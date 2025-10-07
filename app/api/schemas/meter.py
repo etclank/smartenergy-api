@@ -2,9 +2,11 @@
 from pydantic import BaseModel, ConfigDict
 
 
+# ----- Meters -----
 class MeterCreate(BaseModel):
-    name: str
-    location: str | None = None
+    serial_number: str
+    type: str
+    site_id: int
 
 
 class MeterOut(MeterCreate):

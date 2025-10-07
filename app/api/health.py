@@ -2,9 +2,9 @@
 from fastapi import APIRouter, status
 from app.core.cache import get_redis
 
-router = APIRouter()
+router = APIRouter(prefix="/health", tags=["health"])
 
-@router.get("/healthz", status_code=status.HTTP_200_OK)
+@router.get("/z", status_code=status.HTTP_200_OK)
 async def healthz() -> dict[str, str]:
     return {"status": "ok"}
 

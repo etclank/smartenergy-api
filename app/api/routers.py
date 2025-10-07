@@ -1,7 +1,11 @@
+# app/api/routers.py
 from fastapi import APIRouter
-from . import health, auth, meters
+from . import auth, meters, health
 
-api = APIRouter()
-api.include_router(health.router)
+api = APIRouter(prefix="/api")
+
 api.include_router(auth.router)
 api.include_router(meters.router)
+api.include_router(health.router)
+
+

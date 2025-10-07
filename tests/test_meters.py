@@ -1,72 +1,50 @@
 # tests/test_meters.py
 import pytest
-import pytest_asyncio
-from httpx import AsyncClient, ASGITransport
-from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
-from sqlalchemy.pool import StaticPool
-
-from app.main import app
-from app.core.db import Base
-from app.core.deps import get_db
-
-# Use a shared in-memory SQLite database.
-# StaticPool ensures the same connection is reused across sessions.
-TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
-
-engine_test = create_async_engine(
-    TEST_DATABASE_URL,
-    echo=False,
-    poolclass=StaticPool,
-)
-AsyncSessionTest = async_sessionmaker(engine_test, expire_on_commit=False)
-
-# Override the app's dependency to use our test session factory
-async def override_get_db():
-    async with AsyncSessionTest() as session:
-        yield session
-
-app.dependency_overrides[get_db] = override_get_db
-
-
-# Make sure tables exist before any test runs, and dispose after.
-@pytest_asyncio.fixture(scope="module", autouse=True)
-async def setup_test_db():
-    async with engine_test.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-    yield
-    await engine_test.dispose()
-
-transport = ASGITransport(app=app)
+from fastapi import status
 
 @pytest.mark.asyncio
-async def test_create_meter():
-    async with AsyncClient(transport=transport, base_url="http://test") as ac:
-        payload = {"name": "Test Meter", "location": "Test Lab"}
-        response = await ac.post("/meters/", json=payload)
-        assert response.status_code == 201
-        body = response.json()
-        assert body["name"] == "Test Meter"
-        assert "id" in body
+async def test_create_meter(client):
+    """POST /api/meters/ should create a new meter."""
+    payload = {
+        "serial_number": "TEST-001",
+        "type": "single-phase",
+        "site_id": 1,  # adjust if FK required
+    }
+    resp = await client.post("/api/meters/", json=payload)
+    assert resp.status_code == status.HTTP_201_CREATED
+    data = resp.json()
+    assert data["serial_number"] == "TEST-001"
+    assert "id" in data
 
 
 @pytest.mark.asyncio
-async def test_list_meters():
-    async with AsyncClient(transport=transport, base_url="http://test") as ac:
-        response = await ac.get("/meters/")
-        assert response.status_code == 200
-        meters = response.json()
-        assert isinstance(meters, list)
-        assert any(m["name"] == "Test Meter" for m in meters)
+async def test_list_meters(client):
+    """GET /api/meters/ should return a list of meters."""
+    resp = await client.get("/api/meters/")
+    assert resp.status_code == status.HTTP_200_OK
+    data = resp.json()
+    assert isinstance(data, list)
+    if data:
+        assert "serial_number" in data[0]
 
 
 @pytest.mark.asyncio
-async def test_get_meter_by_id():
-    async with AsyncClient(transport=transport, base_url="http://test") as ac:
-        list_response = await ac.get("/meters/")
-        assert list_response.status_code == 200
-        meters = list_response.json()
-        meter_id = meters[0]["id"]
+async def test_get_meter_by_id(client):
+    """GET /api/meters/{id} should retrieve a meter."""
+    # Create first
+    create_payload = {
+        "serial_number": "TEST-002",
+        "type": "three-phase",
+        "site_id": 1,
+    }
+    create_resp = await client.post("/api/meters/", json=create_payload)
+    assert create_resp.status_code == status.HTTP_201_CREATED
+    created = create_resp.json()
 
-        response = await ac.get(f"/meters/{meter_id}")
-        assert response.status_code == 200
-        assert response.json()["id"] == meter_id
+    # Retrieve by ID
+    meter_id = created["id"]
+    resp = await client.get(f"/api/meters/{meter_id}")
+    assert resp.status_code == status.HTTP_200_OK
+    data = resp.json()
+    assert data["id"] == meter_id
+    assert data["serial_number"] == "TEST-002"

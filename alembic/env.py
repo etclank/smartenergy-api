@@ -1,6 +1,5 @@
 # alembic/env.py
 from __future__ import annotations
-
 from logging.config import fileConfig
 
 from alembic import context
@@ -8,29 +7,21 @@ from sqlalchemy import engine_from_config, pool
 from sqlalchemy.engine.url import make_url
 
 from app.core.config import settings
-from app.models.meter import Base as MeterBase  # add other metadata here if needed
+from app.models import Base  # unified metadata for all models
 
 config = context.config
 
 def _sync_url(url_str: str) -> str:
-    """
-    Alembic runs with a *sync* engine. Translate any async URL to a sync variant.
-    - sqlite+aiosqlite://...  -> sqlite://...
-    - postgresql+asyncpg://... -> postgresql+psycopg://...
-    - postgresql+psycopg_async://... -> postgresql+psycopg://...
-    """
     if not url_str:
         return url_str
     url = make_url(url_str)
     driver = url.drivername
-
     if driver.startswith("sqlite+aiosqlite"):
         url = url.set(drivername="sqlite")
     elif driver.startswith("postgresql+asyncpg"):
         url = url.set(drivername="postgresql+psycopg")
     elif driver.startswith("postgresql+psycopg_async"):
         url = url.set(drivername="postgresql+psycopg")
-
     return str(url)
 
 # Inject runtime URL (sync) for Alembic
@@ -42,8 +33,8 @@ if db_url:
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-# Your target metadata
-target_metadata = MeterBase.metadata
+# Target metadata for autogenerate
+target_metadata = Base.metadata
 
 def run_migrations_offline() -> None:
     url = config.get_main_option("sqlalchemy.url")

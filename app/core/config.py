@@ -1,4 +1,4 @@
-# app/config.py
+# app/core/config.py
 from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from typing import List, Any
@@ -11,7 +11,6 @@ class Settings(BaseSettings):
     api_port: int = Field(default=8000, validation_alias=AliasChoices("API_PORT"))
 
     # DB / Redis
-    # Defaults are empty so mypy is happy, but real values should come from env/.env
     database_url: str = Field(default="", validation_alias=AliasChoices("DATABASE_URL"))
     redis_url: str = Field(default="", validation_alias=AliasChoices("REDIS_URL"))
 
@@ -20,16 +19,16 @@ class Settings(BaseSettings):
 
     # JWT
     jwt_secret: str = Field(default="", validation_alias=AliasChoices("JWT_SECRET"))
-    jwt_alg: str = Field(default="HS256", validation_alias=AliasChoices("JWT_ALG"))
+    jwt_algorithm: str = Field(default="HS256", validation_alias=AliasChoices("JWT_ALG"))
     jwt_expire_minutes: int = Field(
         default=60, validation_alias=AliasChoices("JWT_EXPIRE_MINUTES")
     )
 
-    frontend_origins: List[str] = []  # CSV via env FRONTEND_ORIGINS
+    frontend_origins: List[str] = []
 
     model_config = SettingsConfigDict(
         env_file=".env",
-        env_ignore_empty=True,  # don't override defaults with empty values
+        env_ignore_empty=True,
         extra="ignore",
     )
 
@@ -42,7 +41,6 @@ class Settings(BaseSettings):
     
     def __init__(self, **values: Any) -> None:
         super().__init__(**values)
-        # normalize FRONTEND_ORIGINS if provided as CSV
         if isinstance(self.frontend_origins, str):
             self.frontend_origins = self._parse_comma_list(self.frontend_origins)
 

@@ -343,12 +343,16 @@ MIT — see LICENSE.
 **Goal:** Transition the SmartEnergy API from a working MVP into a production-style backend service that demonstrates advanced FastAPI + DevOps maturity.
 Each phase builds incrementally on the deployed app while remaining free-tier-friendly.
 
-## 🪜 Phase 2 Milestones
-| Phase                                     | Focus                                              | Deliverables                                                                                                                 | Proof                                                         |
-| :---------------------------------------- | :------------------------------------------------- | :--------------------------------------------------------------------------------------------------------------------------- | :------------------------------------------------------------ |
-| **1. Postgres Integration (Neon/Render)** | Migrate from SQLite to managed Postgres.           | Update `.env.example` & Docker Compose with `postgresql+asyncpg://…`. Ensure migrations run automatically via `prestart.sh`. | Live Render service using Neon or Render Postgres.            |
-| **2. Redis Caching Layer**                | Implement real caching using Upstash/Render Redis. | In `meter_service.py`, wrap list endpoint with `cache_get`/`cache_set` (TTL = 60 s). Add `/cachez` diagnostic.               | Demonstrate cached vs. uncached latency in README.            |
-| **3. Background Tasks**                   | Add simple async workload.                         | Endpoint `/tasks/refresh` triggers `BackgroundTasks` to recompute meter stats.                                               | Log shows background execution; test verifies job scheduling. |
-| **4. Observability Hooks**                | Introduce tracing & metrics.                       | Add middleware injecting `X-Request-ID`; integrate OTEL SDK exporting to console.                                            | `/healthz` includes `"trace":"enabled"`.                      |
-| **5. Extended Testing & CI**              | Raise coverage to ≥ 90 %.                          | Add negative-case tests for auth, cache fallback, invalid inputs.                                                            | Codecov badge ≥ 90 %.                                         |
-| **6. Documentation & Demo Polish**        | Update README + badges + Makefile.                 | Add “Architecture v2” diagram, step-by-step local/Render instructions, and “Deploy to Render” link.                          | README passes recruiter 30-second scan.                       |
+## 🚀 Phase 2 — Production-Style Backend Evolution
+
+> Objective: transform the SmartEnergy API into a realistic backend service that demonstrates database modeling, relational queries, caching, background jobs, and observability — all within a DevOps-ready FastAPI stack.
+
+| Stage | Focus | Key Deliverables |
+|--------|--------|-----------------|
+| **2.0** | 🧱 **Relational Database Design & Models** | Design and implement a normalized schema (users, meters, readings, tariffs, sites). Create corresponding SQLAlchemy models, Alembic migrations, and FastAPI routes with matching `/site` demo pages. |
+| **2.1** | 💾 Persistent Postgres integration | Migrate from SQLite to managed Postgres (Neon/Render). Validate migrations and seeding. |
+| **2.2** | ⚡ Redis caching layer | Implement caching for heavy endpoints (`/readings/`), TTL = 60 s. |
+| **2.3** | 🧮 Background job example | Add `/tasks/refresh` to recompute daily stats asynchronously. |
+| **2.4** | 🔍 Observability & telemetry | OTEL traces + request-ID logging middleware. |
+| **2.5** | 🧪 Test coverage & CI | ≥ 90 % coverage; Codecov badge green. |
+| **2.6** | 📘 Docs & polish | Final architecture diagram, live demo, Makefile table, deploy instructions. |
