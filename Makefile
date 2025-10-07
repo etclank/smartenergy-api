@@ -78,9 +78,9 @@ sh:
 .PHONY: smoke
 smoke:
 	@echo "→ Checking health..."
-	@$(CURL) http://localhost:$(PORT)/healthz >/dev/null && echo "  /healthz OK"
+	@$(CURL) http://localhost:$(PORT)/api/health/z >/dev/null && echo "  /api/health/z OK"
 	@$(CURL) http://localhost:$(PORT)/site/ >/dev/null && echo "  /site/ OK"
-	@$(CURL) http://localhost:$(PORT)/meters/ >/dev/null && echo "  /meters/ OK" || echo "  /meters/ (may be empty)"
+	@$(CURL) http://localhost:$(PORT)/api/meters/ >/dev/null && echo "  /api/meters/ OK" || echo "  /api/meters/ (may be empty)"
 	@echo "✓ Smoke checks passed"
 
 .PHONY: seed

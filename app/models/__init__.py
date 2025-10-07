@@ -1,4 +1,5 @@
 # app/models/__init__.py
+from .base import Base
 from .user import User
 from .site import Site
 from .tariff import Tariff
@@ -9,6 +10,7 @@ from .energy_reactive import EnergyReactive
 from .max_power import MaxPower
 
 __all__ = [
+    "Base",
     "User",
     "Site",
     "Tariff",

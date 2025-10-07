@@ -15,9 +15,9 @@ from app.models import (
     Site,
     Meter,
     Tariff,
-    ImportedEnergy,
-    ExportedEnergy,
-    ReactiveEnergy,
+    EnergyImported,
+    EnergyExported,
+    EnergyReactive,
     MaxPower,
 )
 
@@ -74,12 +74,12 @@ async def seed() -> None:
                         ts = now - timedelta(hours=h)
 
                         # imported/exported
-                        imp = ImportedEnergy(timestamp=ts, measure_value=random.uniform(0.5, 3.0), meter=meter)
-                        exp = ExportedEnergy(timestamp=ts, measure_value=random.uniform(0.0, 1.0), meter=meter)
+                        imp = EnergyImported(timestamp=ts, measure_value=random.uniform(0.5, 3.0), meter=meter)
+                        exp = EnergyExported(timestamp=ts, measure_value=random.uniform(0.0, 1.0), meter=meter)
                         session.add_all([imp, exp])
 
                         # reactive energy (imported/exported kvarh values)
-                        reactive = ReactiveEnergy(
+                        reactive = EnergyReactive(
                             timestamp=ts,
                             imported_kvarh=random.uniform(0.1, 0.5),
                             exported_kvarh=random.uniform(0.1, 0.4),
