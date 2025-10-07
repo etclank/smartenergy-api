@@ -13,6 +13,8 @@ router = APIRouter(prefix="/meters", tags=["meters"])
 @router.post("/", response_model=MeterOut, status_code=status.HTTP_201_CREATED)
 async def create_meter(payload: MeterCreate, db: AsyncSession = Depends(get_db)) -> MeterOut:
     meter = Meter(
+        name=payload.name,
+        location=payload.location,
         serial_number=payload.serial_number,
         type=payload.type,
         site_id=payload.site_id,
