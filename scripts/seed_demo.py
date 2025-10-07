@@ -61,6 +61,8 @@ async def seed() -> None:
             for site in sites:
                 for i in range(3):
                     meter = Meter(
+                        name=f"{site.name} Meter {i+1}",
+                        location=f"{site.location} - Floor {i+1}",
                         serial_number=f"{site.name[:3].upper()}-{i+1:03d}",
                         type=random.choice(["single-phase", "three-phase"]),
                         site=site,

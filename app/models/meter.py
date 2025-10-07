@@ -14,6 +14,8 @@ class Meter(Base):
     __tablename__ = "meters"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    name: Mapped[str] = mapped_column(String(100))
+    location: Mapped[str] = mapped_column(String(200))
     serial_number: Mapped[str] = mapped_column(String(50), unique=True)
     type: Mapped[str] = mapped_column(String(50))
     site_id: Mapped[int] = mapped_column(ForeignKey("sites.id"))

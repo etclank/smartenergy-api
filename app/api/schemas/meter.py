@@ -4,6 +4,8 @@ from pydantic import BaseModel, ConfigDict
 
 # ----- Meters -----
 class MeterCreate(BaseModel):
+    name: str
+    location: str
     serial_number: str
     type: str
     site_id: int

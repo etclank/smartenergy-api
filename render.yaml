@@ -5,7 +5,7 @@ services:
     env: docker
     plan: free
     region: frankfurt
-    healthCheckPath: /healthz
+    healthCheckPath: /api/health/z
     autoDeploy: true
     dockerfilePath: ./docker/Dockerfile
     envVars:

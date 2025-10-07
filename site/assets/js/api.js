@@ -7,7 +7,8 @@
 
   function getBase() {
     const saved = localStorage.getItem("API_BASE");
-    return norm(saved || window.SITE_API_BASE || "");
+    // Default to '/api' for production deployment
+    return norm(saved || window.SITE_API_BASE || "/api");
   }
   function setBase(v) {
     const n = norm(v);
@@ -40,8 +41,8 @@
   const api = {
     getBase, setBase, getToken, setToken, forceMock: FORCE_MOCK,
 
-    healthz: () => req("healthz"),
-    cachez:  () => req("cachez"),
+    healthz: () => req("health/z"),
+    cachez:  () => req("health/cachez"),
 
     // Auth (optional)
     login:   (username, password) => req("auth/login", { method: "POST", body: JSON.stringify({ username, password }) }),
