@@ -1,6 +1,6 @@
 # app/api/health.py
 from fastapi import APIRouter, status
-from app.cache import get_redis
+from app.core.cache import get_redis
 
 router = APIRouter()
 

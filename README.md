@@ -52,45 +52,84 @@ Includes a tiny static frontend (/site) to showcase the API with either live dat
 ├── alembic/
 │   ├── env.py
 │   └── versions/
+│       └── 0001_init_meters.py
+│
 ├── app/
 │   ├── __init__.py
-│   ├── main.py
-│   ├── config.py              # pydantic-settings: DB/Redis/JWT/CORS
-│   ├── db.py                  # async SQLAlchemy engine/session
-│   ├── deps.py                # FastAPI Depends (db session, auth)
-│   ├── security.py            # JWT helpers
-│   ├── cache.py               # optional Redis client + helpers
-│   ├── api/
-│   │   ├── routers.py         # include_router hub
-│   │   ├── auth.py            # /auth/login, /auth/me
-│   │   ├── health.py          # /healthz, /cachez
-│   │   ├── meters.py          # CRUD sample
-│   │   └── schemas.py         # Pydantic models
-│   ├── models/
-│   │   └── meter.py           # SQLAlchemy model
-│   ├── graphql/               # (future)
-│   ├── tasks/                 # (future)
-│   └── telemetry.py           # (future)
-├── site/                      # static demo frontend
+│   ├── main.py                     # FastAPI app entrypoint (mounts /site)
+│   │
+│   ├── core/                       # foundational infra modules
+│   │   ├── __init__.py
+│   │   ├── config.py               # pydantic-settings: DB, Redis, JWT, CORS
+│   │   ├── db.py                   # async SQLAlchemy engine/session factory
+│   │   ├── cache.py                # async Redis client + helpers
+│   │   ├── security.py             # JWT creation/verify helpers
+│   │   ├── deps.py                 # reusable FastAPI Depends (db, user, etc.)
+│   │   └── telemetry.py            # OpenTelemetry / logging setup (stub)
+│   │
+│   ├── api/                        # route handlers and schemas
+│   │   ├── __init__.py
+│   │   ├── routers.py              # include_router hub
+│   │   ├── auth.py                 # /auth/login, /auth/me
+│   │   ├── health.py               # /healthz, /cachez
+│   │   ├── meters.py               # /meters CRUD
+│   │   └── schemas/                # Pydantic models per domain
+│   │       ├── __init__.py
+│   │       ├── auth.py
+│   │       └── meter.py
+│   │
+│   ├── models/                     # ORM layer (SQLAlchemy)
+│   │   ├── __init__.py
+│   │   ├── meter.py
+│   │   └── user.py                 # (future auth table)
+│   │
+│   ├── services/                   # business logic layer (caching, tasks)
+│   │   ├── __init__.py
+│   │   ├── meter_service.py        # meter CRUD + cache integration
+│   │   └── user_service.py         # (future)
+│   │
+│   ├── tasks/                      # background / async jobs
+│   │   ├── __init__.py
+│   │   └── refresh_meter.py        # background meter refresh example
+│   │
+│   ├── graphql/                    # (future GraphQL via Strawberry)
+│   │   └── __init__.py
+│   │
+│   └── telemetry/                  # (optional split for metrics/log exporters)
+│       └── __init__.py
+│
+├── site/                           # static demo frontend (served at /site)
 │   ├── index.html
 │   ├── pages/
-│   │   └── meters.html
+│   │   ├── meters.html
+│   │   └── meter.html
 │   ├── assets/
-│   │   ├── config.js          # window.SITE_API_BASE, window.SITE_USE_MOCK
-│   │   ├── css/style.css
-│   │   └── js/api.js          # calls API or mock JSON
+│   │   ├── config.js               # window.SITE_API_BASE, window.SITE_USE_MOCK
+│   │   ├── css/
+│   │   │   └── style.css
+│   │   └── js/
+│   │       └── api.js              # API + mock fetch logic
 │   └── mock/
 │       └── meters.json
+│
 ├── scripts/
-│   ├── prestart.sh
-│   └── site-serve.sh          # local static server for /site
+│   ├── prestart.sh                 # runs alembic upgrade + optional seeding
+│   ├── seed_demo.py                # populates demo meters
+│   └── site-serve.sh               # local static-only server for /site
+│
 ├── docker/
 │   └── Dockerfile
-├── docker-compose.yml
+│
+├── docker-compose.yml              # Postgres + Redis + API (dev stack)
+├── Makefile                        # local build/run/smoke/test automation
+│
 ├── alembic.ini
 ├── pyproject.toml
 ├── poetry.lock
+│
 └── tests/
+    ├── __init__.py
+    ├── conftest.py                 # async test fixtures
     ├── test_health.py
     ├── test_auth.py
     └── test_meters.py
@@ -299,3 +338,17 @@ FastAPI & Workers -----------------------> Observability
 ## 📜 License
 MIT — see LICENSE.
 
+## 🚧 Phase 2 Implementation Roadmap (2025)
+
+**Goal:** Transition the SmartEnergy API from a working MVP into a production-style backend service that demonstrates advanced FastAPI + DevOps maturity.
+Each phase builds incrementally on the deployed app while remaining free-tier-friendly.
+
+## 🪜 Phase 2 Milestones
+| Phase                                     | Focus                                              | Deliverables                                                                                                                 | Proof                                                         |
+| :---------------------------------------- | :------------------------------------------------- | :--------------------------------------------------------------------------------------------------------------------------- | :------------------------------------------------------------ |
+| **1. Postgres Integration (Neon/Render)** | Migrate from SQLite to managed Postgres.           | Update `.env.example` & Docker Compose with `postgresql+asyncpg://…`. Ensure migrations run automatically via `prestart.sh`. | Live Render service using Neon or Render Postgres.            |
+| **2. Redis Caching Layer**                | Implement real caching using Upstash/Render Redis. | In `meter_service.py`, wrap list endpoint with `cache_get`/`cache_set` (TTL = 60 s). Add `/cachez` diagnostic.               | Demonstrate cached vs. uncached latency in README.            |
+| **3. Background Tasks**                   | Add simple async workload.                         | Endpoint `/tasks/refresh` triggers `BackgroundTasks` to recompute meter stats.                                               | Log shows background execution; test verifies job scheduling. |
+| **4. Observability Hooks**                | Introduce tracing & metrics.                       | Add middleware injecting `X-Request-ID`; integrate OTEL SDK exporting to console.                                            | `/healthz` includes `"trace":"enabled"`.                      |
+| **5. Extended Testing & CI**              | Raise coverage to ≥ 90 %.                          | Add negative-case tests for auth, cache fallback, invalid inputs.                                                            | Codecov badge ≥ 90 %.                                         |
+| **6. Documentation & Demo Polish**        | Update README + badges + Makefile.                 | Add “Architecture v2” diagram, step-by-step local/Render instructions, and “Deploy to Render” link.                          | README passes recruiter 30-second scan.                       |

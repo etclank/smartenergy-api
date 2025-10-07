@@ -1,7 +1,7 @@
 # app/models/meter.py
 from sqlalchemy import Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
-from app.db import Base  # ← import the shared Base
+from app.core.db import Base  # ← import the shared Base
 
 class Meter(Base):
     __tablename__ = "meters"

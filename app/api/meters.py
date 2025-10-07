@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, status, HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.deps import get_db
+from app.core.deps import get_db
 from app.models.meter import Meter
 from .schemas import MeterCreate, MeterOut
 

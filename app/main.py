@@ -3,12 +3,12 @@ from typing import AsyncIterator
 
 from fastapi import FastAPI
 from app.api.routers import api
-from app.cache import get_redis, close_redis
+from app.core.cache import get_redis, close_redis
 
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import RedirectResponse
-from app.config import settings
+from app.core.config import settings
 
 
 @asynccontextmanager

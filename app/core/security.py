@@ -2,7 +2,7 @@ from datetime import datetime, timedelta, timezone
 from jose import jwt
 from passlib.context import CryptContext
 from fastapi import HTTPException, status
-from app.config import settings
+from app.core.config import settings
 
 if not settings.jwt_secret:
     raise HTTPException(

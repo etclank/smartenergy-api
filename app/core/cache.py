@@ -6,7 +6,7 @@ from typing import Any, Optional, cast
 
 from redis.asyncio import Redis, from_url
 
-from app.config import settings
+from app.core.config import settings
 
 _redis: Optional[Redis] = None
 

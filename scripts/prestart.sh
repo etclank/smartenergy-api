@@ -3,7 +3,6 @@ set -euo pipefail
 
 echo "[prestart] ENV=${ENV:-} DATABASE_URL=${DATABASE_URL:-<empty>} SEED_DEMO=${SEED_DEMO:-1}"
 
-# Skip if no DB URL
 if [ -z "${DATABASE_URL:-}" ]; then
   echo "[prestart] DATABASE_URL not set; skipping migrations & seed."
 else
@@ -13,11 +12,12 @@ else
       ;;
     *)
       echo "[prestart] Running Alembic migrations..."
-      alembic upgrade head
+      if ! alembic upgrade head; then
+        echo "[prestart] Alembic failed — continuing anyway."
+      fi
 
       if [ "${SEED_DEMO:-1}" = "1" ]; then
         echo "[prestart] Seeding demo data..."
-        # Use -m so imports work relative to /app
         if ! python -m scripts.seed_demo; then
           echo "[prestart] Seeding failed (non-fatal); continuing."
         fi

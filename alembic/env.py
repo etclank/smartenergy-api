@@ -7,7 +7,7 @@ from alembic import context
 from sqlalchemy import engine_from_config, pool
 from sqlalchemy.engine.url import make_url
 
-from app.config import settings
+from app.core.config import settings
 from app.models.meter import Base as MeterBase  # add other metadata here if needed
 
 config = context.config
