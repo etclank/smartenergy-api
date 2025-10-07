@@ -34,17 +34,7 @@ if settings.frontend_origins:
         allow_headers=["*"],
     )
 
-def print_router_tree(router: FastAPI, prefix: str = "") -> None:
-    for r in router.routes:
-        if hasattr(r, "path"):
-            print(f"🔍 Router path: {prefix}{r.path}")
-    for sub_router in getattr(router, "routes", []):
-        if hasattr(sub_router, "router"):
-            print_router_tree(sub_router.router, prefix=prefix + sub_router.path)
-
-# ✅ include only unified /api router
 app.include_router(api)
-print_router_tree(app)
 
 # Static site
 app.mount("/site", StaticFiles(directory="site", html=True), name="site")
@@ -52,8 +42,3 @@ app.mount("/site", StaticFiles(directory="site", html=True), name="site")
 @app.get("/", include_in_schema=False)
 async def root() -> RedirectResponse:
     return RedirectResponse(url="/site/")
-
-
-for route in app.routes:
-    if hasattr(route, "path"):
-        print("✅ Registered route:", route.path)
