@@ -6,8 +6,8 @@ from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app.main import app
-from app.db import Base
-from app.deps import get_db
+from app.core.db import Base
+from app.core.deps import get_db
 
 # Use a shared in-memory SQLite database.
 # StaticPool ensures the same connection is reused across sessions.
