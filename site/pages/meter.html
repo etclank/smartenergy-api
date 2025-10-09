@@ -2,36 +2,51 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>SmartEnergy – Meter</title>
-
-  <!-- Resolve all relative URLs under /site -->
+  <title>SmartEnergy – Meter Detail</title>
   <base href="/site/">
-
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <link rel="icon" href="/site/favicon.svg" />
-  <link rel="stylesheet" href="assets/css/style.css" />
-
-  <script src="assets/config.js"></script>
-  <script>
-    // Minimal inline script: show the meter id from the querystring
-    window.addEventListener("DOMContentLoaded", () => {
-      const p = new URLSearchParams(window.location.search);
-      const id = p.get("id") || "(unknown)";
-      document.getElementById("meter-id").textContent = id;
-    });
-  </script>
+  <link rel="stylesheet" href="/site/assets/css/style.css" />
+  <script src="/site/assets/config.js"></script>
+  <script src="/site/assets/js/api.js" defer></script>
+  <script src="/site/assets/vendor/chart.min.js"></script>
+  <script src="/site/assets/vendor/chartjs-adapter-date-fns.bundle.min.js"></script>
+  <script src="/site/assets/js/charts.js"></script>
+  <script src="/site/assets/js/components/breadcrumb.js"></script>
+  <script src="/site/assets/js/pages/meter.js" defer></script>
 </head>
 <body>
   <div class="topbar">
-    <h1>SmartEnergy</h1>
+    <button id="theme-toggle" class="theme-btn">🌙</button>
+    <h1><a href="/site/">SmartEnergy</a></h1>
     <ul class="nav">
-      <li><a href="pages/meters.html">Back to Meters</a></li>
+      <li><a href="/site/pages/sites.html">Sites</a></li>
+      <li><a href="/site/pages/meters.html">Meters</a></li>
+      <li><a href="/site/pages/tariffs.html">Tariffs</a></li>
     </ul>
   </div>
 
   <div class="container">
-    <h2>Meter <span id="meter-id"></span></h2>
-    <p class="muted">Example details page. (Optional: extend your JS to fetch <code>/meters/{id}</code>.)</p>
+    <nav id="breadcrumb"></nav>
+
+    <h2>Meter Details</h2>
+    <div id="meter-detail"><p>Loading meter info…</p></div>
+
+    <!-- 🔹 Date Range Controls -->
+    <div class="date-range-controls card">
+      <label>
+        Start:
+        <input type="date" id="startDate" />
+      </label>
+      <label>
+        End:
+        <input type="date" id="endDate" />
+      </label>
+      <button id="applyRange">Apply</button>
+      <button id="resetRange" class="secondary-btn">Reset</button>
+    </div>
+
+    <section id="energy-charts">
+      <p>Loading charts…</p>
+    </section>
   </div>
 </body>
 </html>

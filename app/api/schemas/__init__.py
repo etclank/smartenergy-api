@@ -8,6 +8,7 @@ from .energy import (
     EnergyReactiveOut,
     MaxPowerOut,
 )
+from .tariff import TariffOut
 
 __all__ = [
     "LoginIn",
@@ -20,4 +21,5 @@ __all__ = [
     "EnergyExportedOut",
     "EnergyReactiveOut",
     "MaxPowerOut",
+    "TariffOut",
 ]

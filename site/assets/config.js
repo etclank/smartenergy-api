@@ -1,4 +1,3 @@
-// Same-origin API (works locally and on Render)
-window.SITE_API_BASE = "/api"; 
-// Default to live API; pass ?mock=1 to force mock data if you want
+// site/assets/config.js
+window.SITE_API_BASE = "/api";
 window.SITE_USE_MOCK = false;

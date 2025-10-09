@@ -1,32 +1,46 @@
 <!doctype html>
 <html lang="en">
-<head>
-  <meta charset="utf-8" />
-  <title>SmartEnergy – Home</title>
+  <head>
+    <meta charset="utf-8" />
+    <title>SmartEnergy – Dashboard</title>
+    <base href="/site/" />
+    <link rel="stylesheet" href="/site/assets/css/style.css" />
+    <script src="/site/assets/config.js"></script>
+    <script src="/site/assets/js/api.js" defer></script>
+    <script src="/site/assets/js/components/breadcrumb.js"></script>
+    <script src="/site/assets/js/pages/dashboard.js" defer></script>
+  </head>
+  <body>
+    <div class="topbar">
+      <button id="theme-toggle" class="theme-btn">🌙</button>
+      <h1><a href="/site/">SmartEnergy</a></h1>
+      <ul class="nav">
+        <li><a href="/site/pages/sites.html">Sites</a></li>
+        <li><a href="/site/pages/meters.html">Meters</a></li>
+        <li><a href="/site/pages/tariffs.html">Tariffs</a></li>
+        <li><a id="openDocs" href="/docs" target="_blank" rel="noopener">Swagger</a></li>
+        <li><a id="openRedoc" href="/redoc" target="_blank" rel="noopener">ReDoc</a></li>
+      </ul>
+    </div>
 
-  <!-- Resolve all relative URLs under /site -->
-  <base href="/site/">
+    <div class="container">
+      <h2>Dashboard Overview</h2>
 
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <link rel="icon" href="/site/favicon.svg" />
-  <link rel="stylesheet" href="assets/css/style.css" />
+      <section id="status">
+        <span id="health" class="badge">API</span>
+        <span id="cache" class="badge">Redis</span>
+      </section>
 
-  <script src="assets/config.js?v=2"></script>
-  <script src="assets/js/api.js?v=2" defer></script>
-</head>
-<body>
-  <div class="topbar">
-    <h1>SmartEnergy</h1>
-    <ul class="nav">
-      <li><a href="/site/pages/meters.html">Meters</a></li>
-      <li><a href="/docs" target="_blank" rel="noopener">Swagger</a></li>
-      <li><a href="/redoc" target="_blank" rel="noopener">ReDoc</a></li>
-    </ul>
-  </div>
+      <section id="summary-cards">
+        <div class="summary-card"><div class="k">Total Imported kWh</div><div class="v" id="sum-imported">–</div></div>
+        <div class="summary-card"><div class="k">Total Exported kWh</div><div class="v" id="sum-exported">–</div></div>
+        <div class="summary-card"><div class="k">Average Max Power (kW)</div><div class="v" id="avg-maxp">–</div></div>
+        <div class="summary-card"><div class="k">Sites / Meters</div><div class="v" id="count-sites">–</div></div>
+      </section>
 
-  <div class="container">
-    <p>Welcome! Explore the demo data and API docs.</p>
-    <p class="badge">Static site served at <code>/site</code></p>
-  </div>
-</body>
+      <div class="card" style="text-align:center;margin-top:24px;">
+        <a href="/site/pages/sites.html" class="btn-primary">View Details →</a>
+      </div>
+    </div>
+  </body>
 </html>

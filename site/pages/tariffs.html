@@ -2,16 +2,13 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>SmartEnergy – Meters</title>
+  <title>SmartEnergy – Tariffs</title>
   <base href="/site/">
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <link rel="icon" href="/site/favicon.svg" />
   <link rel="stylesheet" href="/site/assets/css/style.css" />
   <script src="/site/assets/config.js"></script>
   <script src="/site/assets/js/api.js" defer></script>
   <script src="/site/assets/js/components/breadcrumb.js"></script>
-  <script src="/site/assets/js/charts.js"></script>
-  <script src="/site/assets/js/pages/meters.js" defer></script>
+  <script src="/site/assets/js/pages/tariffs.js" defer></script>
 </head>
 <body>
   <div class="topbar">
@@ -19,7 +16,8 @@
     <h1><a href="/site/">SmartEnergy</a></h1>
     <ul class="nav">
       <li><a href="/site/pages/sites.html">Sites</a></li>
-      <li><a href="/site/pages/tariffs.html">Tariffs</a></li>
+      <li><a href="/site/pages/meters.html">Meters</a></li>
+      <li><a href="/site/pages/tariffs.html" class="active">Tariffs</a></li>
       <li><a href="/docs" target="_blank" rel="noopener">Swagger</a></li>
       <li><a href="/redoc" target="_blank" rel="noopener">ReDoc</a></li>
     </ul>
@@ -27,9 +25,13 @@
 
   <div class="container">
     <nav id="breadcrumb"></nav>
-    <h2>Meters</h2>
-    <p id="demo-banner" class="badge">Loading…</p>
-    <ul id="meters-list"><li class="loading">Loading meters…</li></ul>
+    <h2>Tariffs</h2>
+
+    <div id="tariffs-container" class="card">
+      <ul id="tariffs-list">
+        <li>Loading tariffs...</li>
+      </ul>
+    </div>
   </div>
 </body>
 </html>

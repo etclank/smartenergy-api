@@ -1,4 +1,4 @@
-# SmartEnergy API
+# SmartEnergy API & Dashboard
 
 [![CI](https://github.com/etclank/smartenergy-api/actions/workflows/ci.yml/badge.svg)](https://github.com/etclank/smartenergy-api/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/gh/etclank/smartenergy-api/branch/main/graph/badge.svg)](https://codecov.io/gh/etclank/smartenergy-api)
@@ -47,87 +47,50 @@ Includes a tiny static frontend (/site) to showcase the API with either live dat
 
 ```bash
 .
-├── README.md
-├── .env.example
-├── alembic/
-│   ├── env.py
-│   └── versions/
-│       └── 0001_init_meters.py
-│
 ├── app/
-│   ├── __init__.py
-│   ├── main.py                     # FastAPI app entrypoint (mounts /site)
-│   │
-│   ├── core/                       # foundational infra modules
-│   │   ├── __init__.py
-│   │   ├── config.py               # pydantic-settings: DB, Redis, JWT, CORS
-│   │   ├── db.py                   # async SQLAlchemy engine/session factory
-│   │   ├── cache.py                # async Redis client + helpers
-│   │   ├── security.py             # JWT creation/verify helpers
-│   │   ├── deps.py                 # reusable FastAPI Depends (db, user, etc.)
-│   │   └── telemetry.py            # OpenTelemetry / logging setup (stub)
-│   │
-│   ├── api/                        # route handlers and schemas
-│   │   ├── __init__.py
-│   │   ├── routers.py              # include_router hub
-│   │   ├── auth.py                 # /auth/login, /auth/me
-│   │   ├── health.py               # /healthz, /cachez
-│   │   ├── meters.py               # /meters CRUD
-│   │   └── schemas/                # Pydantic models per domain
-│   │       ├── __init__.py
-│   │       ├── auth.py
-│   │       └── meter.py
-│   │
-│   ├── models/                     # ORM layer (SQLAlchemy)
-│   │   ├── __init__.py
-│   │   ├── meter.py
-│   │   └── user.py                 # (future auth table)
-│   │
-│   ├── services/                   # business logic layer (caching, tasks)
-│   │   ├── __init__.py
-│   │   ├── meter_service.py        # meter CRUD + cache integration
-│   │   └── user_service.py         # (future)
-│   │
-│   ├── tasks/                      # background / async jobs
-│   │   ├── __init__.py
-│   │   └── refresh_meter.py        # background meter refresh example
-│   │
-│   ├── graphql/                    # (future GraphQL via Strawberry)
-│   │   └── __init__.py
-│   │
-│   └── telemetry/                  # (optional split for metrics/log exporters)
-│       └── __init__.py
+│   ├── main.py
+│   ├── core/               # config, db, security, deps
+│   ├── models/             # User, Site, Meter, Tariff, Energy*, MaxPower
+│   ├── api/
+│   │   ├── routers.py
+│   │   ├── auth.py, health.py, sites.py, meters.py, tariffs.py
+│   │   ├── energy_imported.py, energy_exported.py, energy_reactive.py, max_power.py
+│   │   └── schemas/
+│   │       ├── auth.py, meter.py, site.py, tariff.py, energy.py, __init__.py
+│   ├── services/           # (future logic layer)
+│   ├── tasks/              # background example
+│   └── telemetry/          # observability stubs
 │
-├── site/                           # static demo frontend (served at /site)
-│   ├── index.html
+├── site/                   # static demo frontend served at /site
+│   ├── index.html          # dashboard summary page
 │   ├── pages/
-│   │   ├── meters.html
-│   │   └── meter.html
+│   │   ├── sites.html, meters.html, meter.html, tariffs.html
 │   ├── assets/
-│   │   ├── config.js               # window.SITE_API_BASE, window.SITE_USE_MOCK
-│   │   ├── css/
-│   │   │   └── style.css
-│   │   └── js/
-│   │       └── api.js              # API + mock fetch logic
-│   └── mock/
-│       └── meters.json
+│   │   ├── css/style.css
+│   │   ├── js/
+│   │   │   ├── api.js, charts.js
+│   │   │   ├── components/breadcrumb.js
+│   │   │   └── pages/dashboard.js, sites.js, meters.js, meter.js, tariffs.js
+│   │   ├── vendor/         # Chart.js + date-fns adapters
+│   │   └── config.js
+│   └── favicon.svg
 │
 ├── scripts/
-│   ├── prestart.sh                 # runs alembic upgrade + optional seeding
-│   ├── seed_demo.py                # populates demo meters
-│   └── site-serve.sh               # local static-only server for /site
+│   ├── prestart.sh, seed_demo.py
+│   ├── site-serve.sh, site-open.sh
 │
-├── docker/
-│   └── Dockerfile
+├── alembic/                # migrations
+│   ├── env.py
+│   └── versions/
+│       └── *baseline & model migrations*
 │
-├── docker-compose.yml              # Postgres + Redis + API (dev stack)
-├── Makefile                        # local build/run/smoke/test automation
-│
-├── alembic.ini
-├── pyproject.toml
-├── poetry.lock
-│
-└── tests/
+├── docker/ Dockerfile
+├── docker-compose.yml
+├── Makefile
+├── pyproject.toml / poetry.lock
+├── render.yaml
+├── docs/db-diagram.xml
+└── tests/                  # pytest suite for health/auth/meters/energy
     ├── __init__.py
     ├── conftest.py                 # async test fixtures
     ├── test_health.py
@@ -213,7 +176,14 @@ For Postgres + Redis + API, use:
 Compose uses your .env for configuration. For CORS with the static site, include FRONTEND_ORIGINS=http://localhost:5173.
 
 ## 🖥️ Demo Frontend (/site)
-A tiny static UI to list meters and show the API status. It will call the live API if window.SITE_API_BASE is set; otherwise it can fall back to mock JSON.
+The /site static frontend now includes a complete demo dashboard:
+- /site/index.html – Dashboard Overview (status badges + KPI cards)
+- /site/pages/sites.html – list of sites
+- /site/pages/meters.html – meters per site
+- /site/pages/meter.html – detailed charts with date-range filters
+- /site/pages/tariffs.html – tariff summary table
+The demo supports light/dark theme, charting with Chart.js + date-fns, and mock or live API mode (set via window.SITE_API_BASE).
+
 - Configure in site/assets/config.js:
 ```bash
 // Use the live API during local dev:
@@ -343,16 +313,40 @@ MIT — see LICENSE.
 **Goal:** Transition the SmartEnergy API from a working MVP into a production-style backend service that demonstrates advanced FastAPI + DevOps maturity.
 Each phase builds incrementally on the deployed app while remaining free-tier-friendly.
 
-## 🚀 Phase 2 — Production-Style Backend Evolution
+## 🚀 Phase 2 — Production-Style Backend + Frontend Evolution
 
-> Objective: transform the SmartEnergy API into a realistic backend service that demonstrates database modeling, relational queries, caching, background jobs, and observability — all within a DevOps-ready FastAPI stack.
+> Goal: Transform SmartEnergy from a working MVP into a production-grade FastAPI platform demonstrating relational modeling, caching, observability, and a cohesive static frontend — all deployable on free-tier cloud services.
 
-| Stage | Focus | Key Deliverables |
-|--------|--------|-----------------|
-| **2.0** | 🧱 **Relational Database Design & Models** | Design and implement a normalized schema (users, meters, readings, tariffs, sites). Create corresponding SQLAlchemy models, Alembic migrations, and FastAPI routes with matching `/site` demo pages. |
-| **2.1** | 💾 Persistent Postgres integration | Migrate from SQLite to managed Postgres (Neon/Render). Validate migrations and seeding. |
-| **2.2** | ⚡ Redis caching layer | Implement caching for heavy endpoints (`/readings/`), TTL = 60 s. |
-| **2.3** | 🧮 Background job example | Add `/tasks/refresh` to recompute daily stats asynchronously. |
-| **2.4** | 🔍 Observability & telemetry | OTEL traces + request-ID logging middleware. |
-| **2.5** | 🧪 Test coverage & CI | ≥ 90 % coverage; Codecov badge green. |
-| **2.6** | 📘 Docs & polish | Final architecture diagram, live demo, Makefile table, deploy instructions. |
+| Stage   | Focus                                         | Key Deliverables                                                                                                                                                                                  |
+| :------ | :-------------------------------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **2.0** | 🧱 **Relational Data Model Foundation**       | Normalize schema across **Users**, **Sites**, **Meters**, **Tariffs**, and **Energy Readings**. Implement SQLAlchemy 2.x models, Alembic migrations, and CRUD routes with typed Pydantic schemas. |
+| **2.1** | 💻 **Interactive Frontend + API Integration** | Expand `/site` into a full demo dashboard: Sites → Meters → Meter Details with Chart.js visualizations, date-range filters, theme toggle, tariffs table, and KPI summary cards.                   |
+| **2.2** | 💾 **Persistent Postgres Integration**        | Migrate from **SQLite** (dev) to managed **Postgres** (Neon / Render). Validate Alembic migrations, seeding, and connection pooling for async SQLAlchemy.                                         |
+| **2.3** | ⚡ **Caching & Performance Layer**             | Introduce **Redis** caching for high-volume endpoints (`/energy_*`), configurable TTL ≈ 60 s, with lazy invalidation and optional background warm-up.                                             |
+| **2.4** | 🧮 **Background Jobs & Automation**           | Add `/tasks/refresh` or Celery-based worker to compute daily summaries, clean stale cache, and demonstrate async task patterns.                                                                   |
+| **2.5** | 🔍 **Observability & Telemetry**              | Integrate **OpenTelemetry** traces, structured logging with request IDs, and Prometheus-style metrics for latency, throughput, and errors.                                                        |
+| **2.6** | 🧪 **Testing & CI Hardening**                 | Achieve ≥ 90 % pytest coverage, enforce mypy + Ruff checks via GitHub Actions, and upload coverage to Codecov.                                                                                    |
+| **2.7** | 📘 **Documentation & Deployment Polish**      | Finalize architecture diagrams, update README + Makefile targets, include `render.yaml` deployment guide, and produce a short demo video.                                                         |
+
+## ✅ Phase 2.1 — Frontend Integration & Demo Dashboard (Completed)
+
+**Milestone:** The /site frontend has evolved into a complete interactive demo showcasing live API integration and production-ready UI patterns.
+
+**Delivered Features**
+
+- 🧭 Full Navigation Flow: Sites → Meters → Meter Detail with breadcrumb trail and consistent top-bar layout.
+
+- 📊 Dynamic Chart.js Visualizations: Multi-series energy charts with time-axis, tooltips, and color-adaptive theme.
+
+- 🎨 Light/Dark Mode: Theme toggle using CSS variables and persisted localStorage preference.
+
+- 📅 Date-Range Filtering: Client-side chart filtering with auto-refreshing dataset.
+
+- 💸 Tariff Management Page: Tabular tariff summary per site, live from API.
+
+- 🧱 Backend Parity: Matching /api/sites, /api/meters, /api/energy_*, and /api/tariffs routes fully implemented with async SQLAlchemy.
+
+- 🧪 Seeded Demo Data: scripts/seed_demo.py populates week-long meter readings for continuous demo availability.
+
+**Outcome:**
+SmartEnergy now provides a cohesive, data-driven dashboard that bridges the backend API and frontend visualization layer — ready for Phase 2.2 (Postgres + Caching).

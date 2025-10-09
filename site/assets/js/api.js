@@ -7,7 +7,6 @@
 
   function getBase() {
     const saved = localStorage.getItem("API_BASE");
-    // Default to '/api' for production deployment
     return norm(saved || window.SITE_API_BASE || "/api");
   }
   function setBase(v) {
@@ -28,7 +27,7 @@
   async function req(path, opts = {}) {
     const base = getBase();
     const url = `${base}/${path}`.replace(/([^:]\/)\/+/g, "$1");
-    const headers = Object.assign({ "content-type": "application/json" }, opts.headers || {});
+    const headers = { "content-type": "application/json", ...(opts.headers || {}) };
     const token = getToken();
     if (token) headers.Authorization = `Bearer ${token}`;
     const res = await fetch(url, { ...opts, headers, credentials: "omit", cache: "no-store" });
@@ -37,22 +36,20 @@
     return ct.includes("application/json") ? res.json() : res.text();
   }
 
-  // API calls
   const api = {
-    getBase, setBase, getToken, setToken, forceMock: FORCE_MOCK,
+    getBase, setBase, getToken, setToken, req, forceMock: FORCE_MOCK,
 
     healthz: () => req("health/z"),
     cachez:  () => req("health/cachez"),
 
-    // Auth (optional)
-    login:   (username, password) => req("auth/login", { method: "POST", body: JSON.stringify({ username, password }) }),
-    me:      () => req("auth/me"),
+    login: (username, password) =>
+      req("auth/login", { method: "POST", body: JSON.stringify({ username, password }) }),
+    me: () => req("auth/me"),
 
-    // Data
     async metersList() {
       if (!FORCE_MOCK) {
-        try { return await req("meters/"); } 
-        catch (e) { console.warn("metersList live failed, falling back to mock:", e); }
+        try { return await req("meters/"); }
+        catch (e) { console.warn("metersList live failed, using mock:", e); }
       }
       const r = await fetch("mock/meters.json", { cache: "no-store" });
       if (!r.ok) throw new Error(`mock HTTP ${r.status}`);
@@ -61,15 +58,23 @@
     async meterById(id) {
       if (!FORCE_MOCK) {
         try { return await req(`meters/${encodeURIComponent(id)}`); }
-        catch (e) { console.warn("meterById live failed, no mock detail available:", e); throw e; }
+        catch (e) { console.warn("meterById live failed:", e); throw e; }
       }
-      // If needed, synthesize from list:
       const all = await api.metersList();
       return all.find((m) => String(m.id) === String(id)) || null;
     },
+
+    // --- Energy data ---
+    async energyImported(meter_id) { return await req(`energy_imported/?meter_id=${meter_id}`); },
+    async energyExported(meter_id) { return await req(`energy_exported/?meter_id=${meter_id}`); },
+    async energyReactive(meter_id) { return await req(`energy_reactive/?meter_id=${meter_id}`); },
+    async maxPower(meter_id)      { return await req(`max_power/?meter_id=${meter_id}`); },
+
+    // --- Tariffs ---
+    async tariffsList() { return await req("tariffs/"); },
   };
 
-  // Page auto-initializers (run only if matching elements exist)
+  // Landing page status checks
   async function initLanding() {
     const healthEl = document.getElementById("health");
     const cacheEl  = document.getElementById("cache");
@@ -81,91 +86,89 @@
     if (!healthEl || !baseIn) return;
 
     baseIn.value = api.getBase();
+
     const updateDocLinks = () => {
       const b = api.getBase();
-      docs.href = `${b}/docs`; redoc.href = `${b}/redoc`;
+      if (docs) docs.href = `${b}/docs`;
+      if (redoc) redoc.href = `${b}/redoc`;
     };
     updateDocLinks();
 
-    const setBadge = (el, txt, cls) => { el.textContent = txt; el.className = `badge ${cls}`; };
+    const setBadge = (el, txt, cls) => {
+      if (el) { el.textContent = txt; el.className = `badge ${cls}`; }
+    };
 
     try { await api.healthz(); setBadge(healthEl, "API: up", "badge-live"); }
     catch { setBadge(healthEl, "API: down", "badge-error"); }
 
-    try { const c = await api.cachez(); c?.redis === "up" ? setBadge(cacheEl, "Redis: up", "badge-live") : setBadge(cacheEl, "Redis: down", "badge-mock"); }
-    catch { setBadge(cacheEl, "Redis: error", "badge-error"); }
+    try {
+      const c = await api.cachez();
+      c?.redis === "up"
+        ? setBadge(cacheEl, "Redis: up", "badge-live")
+        : setBadge(cacheEl, "Redis: down", "badge-mock");
+    } catch { setBadge(cacheEl, "Redis: error", "badge-error"); }
 
-    saveBtn.addEventListener("click", () => {
+    saveBtn?.addEventListener("click", () => {
       api.setBase(baseIn.value);
       baseIn.value = api.getBase();
       updateDocLinks();
       window.location.reload();
     });
 
-    // Optional: show whoami if we have a token
     const t = api.getToken();
     if (t && whoAmI) {
-      try { const me = await api.me(); whoAmI.textContent = `Signed in as ${me?.username ?? me?.sub ?? "unknown"}`; }
-      catch { whoAmI.textContent = "Auth token invalid."; }
+      try {
+        const me = await api.me();
+        whoAmI.textContent = `Signed in as ${me?.username ?? me?.sub ?? "unknown"}`;
+      } catch { whoAmI.textContent = "Auth token invalid."; }
     }
   }
 
-  async function initMetersList() {
-    const list = document.getElementById("meters-list");
-    const banner = document.getElementById("demo-banner");
-    if (!list || !banner) return;
+  // Expose API globally
+  window.API = api;
 
-    try {
-      const meters = await api.metersList();
-      list.innerHTML = "";
-      if (Array.isArray(meters) && meters.length) {
-        meters.forEach((m) => {
-          const li = document.createElement("li");
-          li.className = "meter-row";
-          const link = document.createElement("a");
-          link.href = `pages/meter.html?id=${encodeURIComponent(m.id)}`;
-          link.textContent = `${m.name} — ${m.location || ""}`;
-          li.appendChild(link);
-          list.appendChild(li);
-        });
-      } else {
-        list.innerHTML = '<li class="empty">No meters found.</li>';
-      }
-      banner.textContent = api.forceMock ? "Demo (mock data)" : "Demo (live data)";
-      banner.className = api.forceMock ? "badge badge-mock" : "badge badge-live";
-    } catch (err) {
-      console.error(err);
-      list.innerHTML = '<li class="error">Failed to load data. Try adding ?mock=1</li>';
-      banner.textContent = "Demo (error)";
-      banner.className = "badge badge-error";
+  // --- Theme handling ---
+  function applyTheme(theme) {
+    document.documentElement.dataset.theme = theme;
+    localStorage.setItem("THEME", theme);
+  }
+
+  function toggleTheme() {
+    const current = localStorage.getItem("THEME") || "dark";
+    const next = current === "dark" ? "light" : "dark";
+    applyTheme(next);
+    updateChartsTheme(next);
+  }
+
+  function initTheme() {
+    const saved = localStorage.getItem("THEME") || "dark";
+    applyTheme(saved);
+    const btn = document.getElementById("theme-toggle");
+    if (btn) {
+      btn.textContent = saved === "dark" ? "🌙" : "☀️";
+      btn.addEventListener("click", () => {
+        toggleTheme();
+        btn.textContent =
+          document.documentElement.dataset.theme === "dark" ? "🌙" : "☀️";
+      });
     }
   }
 
-  async function initMeterDetail() {
-    const details = document.getElementById("meter-detail");
-    if (!details) return;
-    const id = new URLSearchParams(window.location.search).get("id");
-    if (!id) { details.textContent = "Missing meter id"; return; }
-    try {
-      const m = await api.meterById(id);
-      if (!m) { details.textContent = "Meter not found"; return; }
-      details.innerHTML = `
-        <div class="card">
-          <div class="k">ID</div><div class="v">${m.id}</div>
-          <div class="k">Name</div><div class="v">${m.name}</div>
-          <div class="k">Location</div><div class="v">${m.location || ""}</div>
-        </div>`;
-    } catch (e) {
-      console.error(e);
-      details.textContent = "Failed to load meter.";
+  // Notify charts when theme changes
+  function updateChartsTheme(theme) {
+    if (window.Chart && Chart.instances) {
+      Object.values(Chart.instances).forEach((chart) => {
+        const canvas = chart.canvas;
+        const datasets = chart.config.data.datasets;
+        chart.destroy();
+        renderEnergyChart(canvas, datasets);
+      });
     }
   }
 
-  window.API = api; // expose for other scripts/pages
-
+  // Initialize all on load
   window.addEventListener("DOMContentLoaded", () => {
+    initTheme();
     initLanding();
-    initMetersList();
-    initMeterDetail();
   });
 })();
