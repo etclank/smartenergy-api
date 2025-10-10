@@ -170,21 +170,11 @@ Includes a static **demo dashboard** (`/site`) for interactive visualization of 
 ```
 
 ## ⚙️ Configuration
-Environment variables (read via pydantic-settings, .env supported):
+- Environment variables (read via pydantic-settings, .env supported):
 
-| Layer   | Technology                              | Notes |
-|:---------|:---------------------------------------|:------|
-| Runtime | **Python 3.13 (slim)**                  | Managed via Poetry |
-| Web API | **FastAPI 0.115+**                      | Async REST with Swagger & ReDoc |
-| ORM / DB | **SQLAlchemy 2.x (async)** + **SQLite / Postgres** | SQLite for local dev, Postgres for production |
-| Cache   | **Redis 7** (optional)                  | For future caching & task queue layers |
-| Auth    | **JWT** (`python-jose`, `passlib[bcrypt]`) | Secure login & token flow |
-| CI/CD   | **GitHub Actions + Render Deploy**      | Lint → Test → Build → Deploy |
-| Frontend | **Static HTML + Chart.js Dashboard**    | Served from `/site` route or static files |
+- FRONTEND_ORIGINS can be a CSV (http://a,https://b) or a JSON array (["http://a","https://b"]).
 
-FRONTEND_ORIGINS can be a CSV (http://a,https://b) or a JSON array (["http://a","https://b"]).
-
-Copy .env.example → .env and adjust as needed.
+- Copy .env.example → .env and adjust as needed.
 
 
 ## 🧪 Quick Start (Local)
