@@ -1,4 +1,6 @@
-# render.yaml
+# -------------------------------------
+# SmartEnergy API — Render Deployment
+# -------------------------------------
 services:
   - type: web
     name: smartenergy-api
@@ -8,25 +10,26 @@ services:
     healthCheckPath: /api/health/z
     autoDeploy: true
     dockerfilePath: ./docker/Dockerfile
+
     envVars:
+      # Environment mode
       - key: ENV
         value: prod
 
-      # --- Choose ONE of these database configs ---
+      # --- Database configuration ---
+      # Option A — Ephemeral SQLite (free tier)
+      # - key: DATABASE_URL
+      #   value: "sqlite+aiosqlite:////tmp/app.db"
 
-      # A) Easy first deploy (stateless; data resets on redeploy):
-      # value: "sqlite+aiosqlite:////tmp/app.db"
-
-      # B) Proper database (Render Postgres or Neon):
-      # e.g. postgresql+asyncpg://USER:PASSWORD@HOST:5432/DBNAME
+      # Option B — Persistent Postgres (uncomment and replace credentials)
       - key: DATABASE_URL
-        value: "sqlite+aiosqlite:////tmp/app.db"
+        value: "postgresql://smartenergy_db_user:REMOVED_SECRET@dpg-d3kechpr0fns73er9p60-a/smartenergy_db"
 
-      # Optional Redis (Upstash or Render Redis)
+      # --- Redis (optional) ---
       - key: REDIS_URL
         value: ""
 
-      # Auth
+      # --- Auth ---
       - key: JWT_SECRET
         generateValue: true
       - key: JWT_ALG
@@ -34,6 +37,12 @@ services:
       - key: JWT_EXPIRE_MINUTES
         value: "60"
 
-      # CORS (comma-separated if multiple)
+      # --- App configuration ---
       - key: FRONTEND_ORIGINS
         value: ""
+      - key: SEED_DEMO
+        value: "1"
+
+      # --- Optional logging toggle ---
+      - key: LOG_LEVEL
+        value: "info"

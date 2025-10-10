@@ -75,8 +75,8 @@ sh:
 	$(DOCKER) exec -it $(NAME) sh
 
 # ---------- Quick checks ----------
-.PHONY: smoke
-smoke:
+.PHONY: smoke-sqlite
+smoke-sqlite:
 	@echo "→ Checking health..."
 	@$(CURL) http://localhost:$(PORT)/api/health/z >/dev/null && echo "  /api/health/z OK"
 	@$(CURL) http://localhost:$(PORT)/site/ >/dev/null && echo "  /site/ OK"
@@ -92,10 +92,27 @@ seed:
 	@$(CURL) http://localhost:$(PORT)/meters/ | jq '.' || true
 
 # ---------- docker-compose stack ----------
-.PHONY: compose-up
-compose-up:
-	$(DC) up --build
+.PHONY: up-pg
+up-pg:
+	@echo "→ Starting Postgres + Redis + API stack (deployment parity mode)"
+	$(DC) up --build -d
+	@echo "✓ Stack up — http://localhost:8000"
 
-.PHONY: compose-down
-compose-down:
-	$(DC) down -v
+.PHONY: down
+down:
+	-$(DOCKER) rm -f $(NAME) >/dev/null 2>&1 || true
+	$(DC) down -v || true
+
+.PHONY: smoke
+smoke:
+	@echo "→ Checking health..."
+	@$(CURL) http://localhost:$(PORT)/api/health/z >/dev/null && echo "  /api/health/z OK" || echo "  /api/health/z FAIL"
+	@$(CURL) http://localhost:$(PORT)/api/health/cachez >/dev/null && echo "  /api/health/cachez OK" || echo "  /api/health/cachez (no Redis)"
+	@$(CURL) http://localhost:$(PORT)/site/ >/dev/null && echo "  /site/ OK"
+	@$(CURL) http://localhost:$(PORT)/api/meters/ >/dev/null && echo "  /api/meters/ OK" || echo "  /api/meters/ (may be empty)"
+	@echo "✓ Smoke checks complete"
+
+.PHONY: seed-demo
+seed-demo:
+	docker compose exec api python -m scripts.seed_demo
+

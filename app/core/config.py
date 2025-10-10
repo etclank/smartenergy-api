@@ -26,6 +26,8 @@ class Settings(BaseSettings):
 
     frontend_origins: List[str] = []
 
+    seed_demo: str | int | bool = 1
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_ignore_empty=True,

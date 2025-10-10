@@ -1,31 +1,27 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-echo "[prestart] ENV=${ENV:-} DATABASE_URL=${DATABASE_URL:-<empty>} SEED_DEMO=${SEED_DEMO:-1}"
+echo "[prestart] ENV=${ENV:-} DATABASE_URL=${DATABASE_URL:-<empty>}"
 
-if [ -z "${DATABASE_URL:-}" ]; then
-  echo "[prestart] DATABASE_URL not set; skipping migrations & seed."
-else
-  case "$DATABASE_URL" in
-    sqlite+aiosqlite:///:memory:*|sqlite:///:memory:*)
-      echo "[prestart] In-memory SQLite; skipping migrations & seed."
-      ;;
-    *)
-      echo "[prestart] Running Alembic migrations..."
-      if ! alembic upgrade head; then
-        echo "[prestart] Alembic failed — continuing anyway."
-      fi
-
-      if [ "${SEED_DEMO:-1}" = "1" ]; then
-        echo "[prestart] Seeding demo data..."
-        if ! python -m scripts.seed_demo; then
-          echo "[prestart] Seeding failed (non-fatal); continuing."
-        fi
-      else
-        echo "[prestart] SEED_DEMO=0; skipping demo seed."
-      fi
-      ;;
-  esac
+# Wait for Postgres if needed
+if [[ "${DATABASE_URL:-}" == postgresql* ]]; then
+  echo "[prestart] Waiting for PostgreSQL to be ready..."
+  ATTEMPTS=0
+  until pg_isready -h "$(echo "$DATABASE_URL" | sed -E 's|.*@([^:/]+).*|\1|')" \
+                    -p "$(echo "$DATABASE_URL" | sed -E 's|.*:([0-9]+)/.*|\1|')" \
+                    -U "$(echo "$DATABASE_URL" | sed -E 's|.*//([^:]+):.*|\1|')" >/dev/null 2>&1; do
+    ATTEMPTS=$((ATTEMPTS + 1))
+    if [ $ATTEMPTS -ge 15 ]; then
+      echo "[prestart] Postgres not ready after 15 attempts, continuing anyway..."
+      break
+    fi
+    echo "  → attempt $ATTEMPTS: waiting for DB..."
+    sleep 2
+  done
 fi
 
+echo "[prestart] Initializing database..."
+python -m scripts.init_db
+
 echo "[prestart] Starting app..."
+exec uvicorn app.main:app --host 0.0.0.0 --port "${PORT:-8000}"
