@@ -23,7 +23,7 @@ services:
 
       # Option B — Persistent Postgres (uncomment and replace credentials)
       - key: DATABASE_URL
-        value: "postgresql://smartenergy_db_user:REMOVED_SECRET@dpg-d3kechpr0fns73er9p60-a/smartenergy_db"
+        value: "postgresql+asyncpg://smartenergy_db_user:REMOVED_SECRET@dpg-d3kechpr0fns73er9p60-a/smartenergy_db"
 
       # --- Redis (optional) ---
       - key: REDIS_URL
