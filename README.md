@@ -7,8 +7,10 @@
 [![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/etclank/smartenergy-api)
 
 
-A modern FastAPI starter with async SQLAlchemy, JWT auth, Alembic migrations, optional Redis caching, and GitHub Actions CI.
-Includes a tiny static frontend (/site) to showcase the API with either live data or mock JSON.
+---
+
+A modern **FastAPI + PostgreSQL** backend with async SQLAlchemy, JWT authentication, optional Redis caching, and full Docker + Render deployment.  
+Includes a static **demo dashboard** (`/site`) for interactive visualization of live API data.
 
 ---
 
@@ -48,80 +50,148 @@ Includes a tiny static frontend (/site) to showcase the API with either live dat
 ```bash
 .
 ├── app/
-│   ├── main.py
-│   ├── core/               # config, db, security, deps
-│   ├── models/             # User, Site, Meter, Tariff, Energy*, MaxPower
-│   ├── api/
-│   │   ├── routers.py
-│   │   ├── auth.py, health.py, sites.py, meters.py, tariffs.py
-│   │   ├── energy_imported.py, energy_exported.py, energy_reactive.py, max_power.py
-│   │   └── schemas/
-│   │       ├── auth.py, meter.py, site.py, tariff.py, energy.py, __init__.py
-│   ├── services/           # (future logic layer)
-│   ├── tasks/              # background example
-│   └── telemetry/          # observability stubs
+│   ├── __init__.py
+│   ├── main.py                     # FastAPI app entrypoint (creates app, mounts routers, serves /site)
+│   │
+│   ├── core/                       # Core runtime modules
+│   │   ├── config.py               # Pydantic settings: loads ENV, DATABASE_URL, JWT, etc.
+│   │   ├── db.py                   # Async SQLAlchemy engine/session creation
+│   │   ├── security.py             # Password hashing (bcrypt) + JWT utilities
+│   │   ├── deps.py                 # Dependency injection helpers for routes
+│   │   ├── cache.py                # Optional Redis caching logic
+│   │   └── telemetry.py            # Placeholder for OpenTelemetry integration (future)
+│   │
+│   ├── models/                     # SQLAlchemy ORM models
+│   │   ├── base.py                 # Declarative Base + metadata
+│   │   ├── user.py                 # User(id, username, email, password_hash)
+│   │   ├── site.py                 # Site(id, name, location, owner_id)
+│   │   ├── meter.py                # Meter(id, name, serial_number, site_id)
+│   │   ├── tariff.py               # Tariff(id, name, price_per_kwh, site_id)
+│   │   ├── energy_imported.py      # Hourly imported energy readings
+│   │   ├── energy_exported.py      # Hourly exported energy readings
+│   │   ├── energy_reactive.py      # Reactive energy readings
+│   │   ├── max_power.py            # Daily maximum power values
+│   │   └── __init__.py
+│   │
+│   ├── api/                        # REST API routes & schemas
+│   │   ├── routers.py              # Central router registration for all endpoints
+│   │   ├── auth.py                 # /api/auth/login and /api/auth/me
+│   │   ├── health.py               # /api/healthz (service health endpoint)
+│   │   ├── sites.py                # CRUD for /api/sites
+│   │   ├── meters.py               # CRUD for /api/meters
+│   │   ├── tariffs.py              # CRUD for /api/tariffs
+│   │   ├── energy_imported.py      # /api/energy_imported
+│   │   ├── energy_exported.py      # /api/energy_exported
+│   │   ├── energy_reactive.py      # /api/energy_reactive
+│   │   ├── max_power.py            # /api/max_power
+│   │   └── schemas/                # Pydantic request/response models
+│   │       ├── auth.py
+│   │       ├── site.py
+│   │       ├── meter.py
+│   │       ├── tariff.py
+│   │       ├── energy.py
+│   │       └── __init__.py
+│   │
+│   ├── services/                   # Optional business logic layer
+│   │   ├── user_service.py         # Example service for user creation/validation
+│   │   └── meter_service.py        # Example service for meter logic
+│   │
+│   ├── tasks/                      # Background jobs (future Celery/Dramatiq tasks)
+│   │   ├── __init__.py
+│   │   └── refresh_meter.py        # Example placeholder for periodic data refresh
+│   │
+│   ├── telemetry/                  # Observability & monitoring stubs
+│   │   └── __init__.py
+│   │
+│   └── graphql/                    # Placeholder for future GraphQL schema (Strawberry)
+│       └── __init__.py
 │
-├── site/                   # static demo frontend served at /site
-│   ├── index.html          # dashboard summary page
-│   ├── pages/
-│   │   ├── sites.html, meters.html, meter.html, tariffs.html
+├── site/                           # Static frontend demo
+│   ├── index.html                  # Dashboard summary
+│   ├── favicon.svg
+│   ├── pages/                      # Section pages
+│   │   ├── sites.html              # List of sites
+│   │   ├── meters.html             # Meter list per site
+│   │   ├── meter.html              # Meter detail charts
+│   │   └── tariffs.html            # Tariff summary
+│   ├── mock/                       # Offline fallback JSON
+│   │   └── meters.json
 │   ├── assets/
-│   │   ├── css/style.css
-│   │   ├── js/
-│   │   │   ├── api.js, charts.js
-│   │   │   ├── components/breadcrumb.js
-│   │   │   └── pages/dashboard.js, sites.js, meters.js, meter.js, tariffs.js
-│   │   ├── vendor/         # Chart.js + date-fns adapters
-│   │   └── config.js
-│   └── favicon.svg
+│   │   ├── config.js               # API base URL + mock settings
+│   │   ├── css/style.css           # Styling (light/dark themes)
+│   │   ├── js/                     # Frontend logic
+│   │   │   ├── api.js              # Fetch wrapper for API calls
+│   │   │   ├── charts.js           # Chart.js setup + helpers
+│   │   │   ├── theme.js            # Light/dark theme toggle
+│   │   │   ├── components/
+│   │   │   │   └── breadcrumb.js
+│   │   │   └── pages/              # Page-specific JS controllers
+│   │   │       ├── dashboard.js
+│   │   │       ├── sites.js
+│   │   │       ├── meters.js
+│   │   │       ├── meter.js
+│   │   │       └── tariffs.js
+│   │   └── vendor/                 # Third-party libs
+│   │       ├── chart.min.js
+│   │       ├── chartjs-adapter-date-fns.min.js
+│   │       └── date-fns.min.js
 │
-├── scripts/
-│   ├── prestart.sh, seed_demo.py
-│   ├── site-serve.sh, site-open.sh
+├── scripts/                        # Management & automation scripts
+│   ├── prestart.sh                 # Runs before Uvicorn: wait for DB, init, seed
+│   ├── init_db.py                  # Creates tables & seeds if SEED_DEMO=1
+│   ├── seed_demo.py                # Generates sample data for demo visualization
+│   ├── site-serve.sh               # Local static server (for /site)
+│   └── site-open.sh                # Opens local site in browser
 │
-├── alembic/                # migrations
-│   ├── env.py
-│   └── versions/
-│       └── *baseline & model migrations*
+├── docker/
+│   └── Dockerfile                  # Multi-stage Docker build (Poetry-based)
 │
-├── docker/ Dockerfile
-├── docker-compose.yml
-├── Makefile
-├── pyproject.toml / poetry.lock
-├── render.yaml
-├── docs/db-diagram.xml
-└── tests/                  # pytest suite for health/auth/meters/energy
-    ├── __init__.py
-    ├── conftest.py                 # async test fixtures
-    ├── test_health.py
-    ├── test_auth.py
-    └── test_meters.py
+├── docker-compose.yml              # Local dev stack (Postgres + Redis + API)
+├── render.yaml                     # Render deployment definition (Docker)
+│
+├── Makefile                        # CLI shortcuts for build, run, logs, smoke, etc.
+├── pyproject.toml / poetry.lock     # Dependencies & metadata
+├── mypy.ini / pytest.ini            # Type-check & testing configuration
+├── LICENSE                          # MIT license
+│
+├── docs/
+│   ├── db-diagram.drawio           # ERD visual of database schema
+│   └── db-diagram.xml
+│
+└── tests/                          # pytest suite
+    ├── conftest.py                 # async fixtures, DB setup
+    ├── test_health.py              # Health endpoint test
+    ├── test_auth.py                # JWT auth tests
+    ├── test_meters.py              # Meter CRUD tests
+    ├── test_energy_endpoints.py    # Energy route coverage
+    ├── test_tariff.py              # Tariff endpoints
+    └── __pycache__/                # Compiled cache (ignored in VCS)
+
 ```
 
 ## ⚙️ Configuration
 Environment variables (read via pydantic-settings, .env supported):
 
-| var                  | example / default              | purpose                                  |
-| -------------------- | ------------------------------ | ---------------------------------------- |
-| `ENV`                | `dev`                          | environment label                        |
-| `API_HOST`           | `0.0.0.0`                      | server host                              |
-| `API_PORT`           | `8000`                         | server port                              |
-| `DATABASE_URL`       | `sqlite+aiosqlite:///./app.db` | DB URL (SQLite dev, Postgres in Compose) |
-| `REDIS_URL`          | `redis://localhost:6379/0`     | optional Redis                           |
-| `JWT_SECRET`         | `change-me`                    | JWT signing secret                       |
-| `JWT_ALG`            | `HS256`                        | JWT algorithm                            |
-| `JWT_EXPIRE_MINUTES` | `60`                           | token lifetime                           |
-| `FRONTEND_ORIGINS`   | `http://localhost:5173`        | CSV or JSON array; CORS allowlist        |
+| Layer   | Technology                              | Notes |
+|:---------|:---------------------------------------|:------|
+| Runtime | **Python 3.13 (slim)**                  | Managed via Poetry |
+| Web API | **FastAPI 0.115+**                      | Async REST with Swagger & ReDoc |
+| ORM / DB | **SQLAlchemy 2.x (async)** + **SQLite / Postgres** | SQLite for local dev, Postgres for production |
+| Cache   | **Redis 7** (optional)                  | For future caching & task queue layers |
+| Auth    | **JWT** (`python-jose`, `passlib[bcrypt]`) | Secure login & token flow |
+| CI/CD   | **GitHub Actions + Render Deploy**      | Lint → Test → Build → Deploy |
+| Frontend | **Static HTML + Chart.js Dashboard**    | Served from `/site` route or static files |
 
 FRONTEND_ORIGINS can be a CSV (http://a,https://b) or a JSON array (["http://a","https://b"]).
 
 Copy .env.example → .env and adjust as needed.
 
-## 🧪 Quick Start (API)
-### Option A — Poetry (SQLite dev)
+
+## 🧪 Quick Start (Local)
+### 🐍 Using Poetry with SQLite
 ```bash
 poetry install
-poetry run alembic upgrade head          # create tables
+poetry run python -m scripts.init_db
 poetry run uvicorn app.main:app --reload
 ```
 
@@ -129,52 +199,32 @@ Docs available at:
 - Swagger → http://127.0.0.1:8000/docs
 - ReDoc → http://127.0.0.1:8000/redoc
 
-### Option B — 🐋 Local Docker Workflow (Makefile)
-**Build the Docker image**
-```bash
-make build
-```
-**Run container interactively (SQLite in image)**
-```bash
-make up
-```
-**Run container with explicit database URL and JWT secret**
-```bash
-make up DATABASE_URL="sqlite+aiosqlite:////tmp/app.db" JWT_SECRET=dev
-```
-**Stop and remove the background container**
-```bash
-make stop
-```
-**Follow logs**
-```bash
-make logs
-```
-**Open a shell inside the running container**
-```bash
-make sh
-```
-**Run a quick smoke test (healthz, site, meters)**
-```bash
-make smoke
-```
-**Create a demo meter**
-```bash
-make seed
-```
-### 🧱 Full Stack (Docker Compose)
+### 🐋 Using Docker Compose (Postgres + Redis + API)
 ```bash
 make compose-up
-# then open http://localhost:8000
+# open http://localhost:8000
 make compose-down
 ```
+Services:
+- API: http://localhost:8000
+- Postgres: localhost:5432
+- Redis: localhost:6379 (optional)
 
-For Postgres + Redis + API, use:
-- API → http://localhost:8000
-- Postgres → localhost:5432 (from Compose)
-- Redis → localhost:6379 (optional)
-Compose uses your .env for configuration. For CORS with the static site, include FRONTEND_ORIGINS=http://localhost:5173.
+## ☁️ Deployment on Render
+### 🧱 Render Setup
+1. Create a free Render PostgreSQL database.
+- Example URL:
+      postgresql://smartenergy_user:abc123@smartenergy-db:5432/smartenergy
+2. Copy that URL and update render.yaml:
+```bash
+- key: DATABASE_URL
+  value: "postgresql+asyncpg://smartenergy_user:abc123@smartenergy-db:5432/smartenergy"
+- key: SEED_DEMO
+  value: "1"
+```
 
+Click “Deploy to Render” → done!
+Your app will be live at https://smartenergy-api.onrender.com.
 ## 🖥️ Demo Frontend (/site)
 The /site static frontend now includes a complete demo dashboard:
 - /site/index.html – Dashboard Overview (status badges + KPI cards)
@@ -200,46 +250,23 @@ window.SITE_USE_MOCK = false; // set true to force mock
   - /site/pages/meters.html – lists meters from API (or mock)
 - You can also force mock mode via URL: ?mock=1
 
-## 🔌 API Endpoints (starter)
-- GET /healthz → {"status":"ok"}
-- GET /cachez → {"redis":"up|down"} (optional Redis)
-- POST /auth/login → {"access_token": "...", "token_type": "bearer"}
-- GET /auth/me (Bearer token) → current user claims
-- GET /meters/ → list meters
-- POST /meters/ → create meter { "name": "...", "location": "..." }
-- GET /meters/{id} → get meter by id
+## 🔌 API Highlights
+- GET /api/healthz → health check
+- POST /api/auth/login → JWT login
+- GET /api/auth/me → current user
+- GET /api/sites / /api/meters / /api/tariffs → main entities
+- GET /api/energy_* → hourly energy data
 
 ## 🧰 Dev Tasks
-### Tests, Lint, Types
 ```bash
 # Lint
 poetry run ruff check .
-
-# Types
+# Type check
 poetry run mypy app
-
-# Tests (SQLite in-memory for CI; local uses your env)
-DATABASE_URL='sqlite+aiosqlite:///:memory:' JWT_SECRET='dev' \
+# Tests
 poetry run pytest --maxfail=1 --disable-warnings -q
-```
-### Alembic
-```bash
-# Create / migrate schema
-poetry run alembic upgrade head
-
-# Make a new revision (edit models first)
-poetry run alembic revision -m "add something"
-poetry run alembic upgrade head
-```
-
-### Local test of image:
-```bash
-docker build -t smartenergy-api -f docker/Dockerfile .
-docker run --rm -p 8000:8000 \
-  -e ENV=prod \
-  -e DATABASE_URL=sqlite+aiosqlite:///tmp/app.db \
-  -e JWT_SECRET=localsecret \
-  smartenergy-api
+# Local smoke test
+make smoke
 ```
 
 ### 🧱 CI
@@ -248,18 +275,6 @@ docker run --rm -p 8000:8000 \
 - Badges at top of this README
 Codecov badge assumes you’ve connected the repo in Codecov and are uploading coverage from CI.
 
-### Run tests
-```bash
-poetry run pytest --maxfail=1 --disable-warnings -q
-```
-
-## Roadmap (nice-to-have)
-- Redis-backed rate limiting (FastAPI-Limiter)
-- Background jobs (Celery or BackgroundTasks)
-- GraphQL endpoint (Strawberry) and WS stream
-- Telemetry (OpenTelemetry → exporter)
-- Helm chart under /chart for AKS/K8s
-- Render deploy (wired up via render.yaml)
 
 ## 🔮 Future Enhancements / Next Architecture Iteration
 
@@ -328,25 +343,16 @@ Each phase builds incrementally on the deployed app while remaining free-tier-fr
 | **2.6** | 🧪 **Testing & CI Hardening**                 | Achieve ≥ 90 % pytest coverage, enforce mypy + Ruff checks via GitHub Actions, and upload coverage to Codecov.                                                                                    |
 | **2.7** | 📘 **Documentation & Deployment Polish**      | Finalize architecture diagrams, update README + Makefile targets, include `render.yaml` deployment guide, and produce a short demo video.                                                         |
 
-## ✅ Phase 2.1 — Frontend Integration & Demo Dashboard (Completed)
+## ✅ 🧱 Stage 2.2 — Persistent Postgres Integration (✅ Completed)
 
-**Milestone:** The /site frontend has evolved into a complete interactive demo showcasing live API integration and production-ready UI patterns.
+**Goal:** Migrate from ephemeral SQLite to persistent managed Postgres with auto initialization and seed support.
 
-**Delivered Features**
+### **Deliverables**
+- Replaced Alembic with lightweight SQLAlchemy create_all initialization
+- Added scripts/init_db.py + scripts/seed_demo.py
+- Updated Docker and prestart.sh for multi-DB support (Postgres & SQLite)
+- Successfully deployed to Render using managed Postgres
+- Smoke tests and Docker Compose workflows verified
 
-- 🧭 Full Navigation Flow: Sites → Meters → Meter Detail with breadcrumb trail and consistent top-bar layout.
-
-- 📊 Dynamic Chart.js Visualizations: Multi-series energy charts with time-axis, tooltips, and color-adaptive theme.
-
-- 🎨 Light/Dark Mode: Theme toggle using CSS variables and persisted localStorage preference.
-
-- 📅 Date-Range Filtering: Client-side chart filtering with auto-refreshing dataset.
-
-- 💸 Tariff Management Page: Tabular tariff summary per site, live from API.
-
-- 🧱 Backend Parity: Matching /api/sites, /api/meters, /api/energy_*, and /api/tariffs routes fully implemented with async SQLAlchemy.
-
-- 🧪 Seeded Demo Data: scripts/seed_demo.py populates week-long meter readings for continuous demo availability.
-
-**Outcome:**
-SmartEnergy now provides a cohesive, data-driven dashboard that bridges the backend API and frontend visualization layer — ready for Phase 2.2 (Postgres + Caching).
+## 🔮 Next Stage (2.3) — Caching & Performance Layer
+Introduce Redis-based caching and response acceleration for high-volume endpoints (/energy_*).
