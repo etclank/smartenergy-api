@@ -9,23 +9,23 @@
 
 ---
 
-A modern **FastAPI + PostgreSQL** backend with async SQLAlchemy, JWT authentication, optional Redis caching, and full Docker + Render deployment.  
-Includes a static **demo dashboard** (`/site`) for interactive visualization of live API data.
+A production-style **FastAPI + PostgreSQL + Redis** backend with async SQLAlchemy 2.x, JWT auth, configurable caching, and full Docker + Render deployment.  
+Includes a static **demo dashboard** (`/site`) visualizing live API data.
 
 ---
 
 ## 🚀 Tech Stack
 
-| Layer   | Choice                               | Notes                                |
-| ------- | ------------------------------------ | ------------------------------------ |
-| Runtime | **Python 3.13**                      | Poetry-managed                       |
-| Web API | **FastAPI 0.115+**                   | Async REST, auto Swagger/Redoc       |
-| DB      | **SQLite (dev)** / **Postgres**      | Async SQLAlchemy 2.x + Alembic       |
-| Cache   | **Redis** (optional)                 | Used for cache/ping placeholder      |
-| Auth    | **JWT** (python-jose)                | `/auth/login`, `/auth/me`            |
-| CI/CD   | **GitHub Actions**                   | Ruff, mypy, pytest, coverage         |
-| Demo UI | **Static HTML/CSS/JS** under `/site` | Calls API or falls back to mock JSON |
 
+| Layer | Choice | Notes |
+|:--|:--|:--|
+| Runtime | **Python 3.13** | Poetry-managed |
+| Web API | **FastAPI 0.115+** | Async REST + auto Swagger/ReDoc |
+| Database | **SQLite (dev)** / **Postgres (prod)** | Async SQLAlchemy 2.x (create_all init) |
+| Cache | **Redis 7 (local)** / **Upstash (Render)** | Cached responses for `/energy_*` & metadata |
+| Auth | **JWT (python-jose)** | `/auth/login`, `/auth/me` |
+| CI/CD | **GitHub Actions + Codecov** | Ruff · mypy · pytest · coverage |
+| Demo UI | **Static HTML + Chart.js** | Served under `/site` |
 
 ---
 
@@ -84,6 +84,8 @@ Includes a static **demo dashboard** (`/site`) for interactive visualization of 
 │   │   ├── energy_exported.py      # /api/energy_exported
 │   │   ├── energy_reactive.py      # /api/energy_reactive
 │   │   ├── max_power.py            # /api/max_power
+│   │   ├── utils/                    # Utility modules for API layer
+│   │   │   └── cache_utils.py        # Stage 2.3: @cache_response decorator for Redis caching
 │   │   └── schemas/                # Pydantic request/response models
 │   │       ├── auth.py
 │   │       ├── site.py
@@ -165,6 +167,7 @@ Includes a static **demo dashboard** (`/site`) for interactive visualization of 
     ├── test_meters.py              # Meter CRUD tests
     ├── test_energy_endpoints.py    # Energy route coverage
     ├── test_tariff.py              # Tariff endpoints
+    ├── test_cache.py               #  verifies Redis caching + fail-open behavior
     └── __pycache__/                # Compiled cache (ignored in VCS)
 
 ```
@@ -177,8 +180,9 @@ Includes a static **demo dashboard** (`/site`) for interactive visualization of 
 - Copy .env.example → .env and adjust as needed.
 
 
-## 🧪 Quick Start (Local)
-### 🐍 Using Poetry with SQLite
+## 🧪 Quick Start
+
+### 🐍 Local (dev, SQLite)
 ```bash
 poetry install
 poetry run python -m scripts.init_db
@@ -191,14 +195,19 @@ Docs available at:
 
 ### 🐋 Using Docker Compose (Postgres + Redis + API)
 ```bash
-make compose-up
+make up-pg
+make logs-pg
+make smoke
 # open http://localhost:8000
-make compose-down
 ```
-Services:
-- API: http://localhost:8000
-- Postgres: localhost:5432
-- Redis: localhost:6379 (optional)
+### Services:
+
+| Service  | URL                                            | Notes                 |
+| :------- | :--------------------------------------------- | :-------------------- |
+| API      | [http://localhost:8000](http://localhost:8000) | FastAPI + static site |
+| Postgres | localhost:5432                                 | `postgres/postgres`   |
+| Redis    | localhost:6379                                 | cache layer           |
+
 
 ## ☁️ Deployment on Render
 ### 🧱 Render Setup
@@ -333,16 +342,16 @@ Each phase builds incrementally on the deployed app while remaining free-tier-fr
 | **2.6** | 🧪 **Testing & CI Hardening**                 | Achieve ≥ 90 % pytest coverage, enforce mypy + Ruff checks via GitHub Actions, and upload coverage to Codecov.                                                                                    |
 | **2.7** | 📘 **Documentation & Deployment Polish**      | Finalize architecture diagrams, update README + Makefile targets, include `render.yaml` deployment guide, and produce a short demo video.                                                         |
 
-## ✅ 🧱 Stage 2.2 — Persistent Postgres Integration (✅ Completed)
+## ⚙️ Stage 2.3 — Caching & Performance Layer (✅ Completed)
 
-**Goal:** Migrate from ephemeral SQLite to persistent managed Postgres with auto initialization and seed support.
-
-### **Deliverables**
-- Replaced Alembic with lightweight SQLAlchemy create_all initialization
-- Added scripts/init_db.py + scripts/seed_demo.py
-- Updated Docker and prestart.sh for multi-DB support (Postgres & SQLite)
-- Successfully deployed to Render using managed Postgres
-- Smoke tests and Docker Compose workflows verified
-
-## 🔮 Next Stage (2.3) — Caching & Performance Layer
-Introduce Redis-based caching and response acceleration for high-volume endpoints (/energy_*).
+### Highlights
+* **New module:** `app/core/cache.py` – async Redis client with graceful fail-open.  
+* **Decorator:** `@cache_response(ttl=…)` in `app/api/utils/cache_utils.py` adds transparent response caching.  
+* **Endpoints cached:**  
+  * `/api/energy_imported`, `/api/energy_exported`, `/api/energy_reactive` → TTL 60 s  
+  * `/api/max_power` → TTL 120 s  
+  * `/api/tariffs`, `/api/sites`, `/api/meters` → TTL 30–300 s  
+* **Health endpoint enhanced:** `/api/health/z` now reports Redis status (`"up"` / `"down"`) + doc links.  
+* **Frontend badges:** `/site/index.html` displays API and Redis connectivity live.  
+* **Tests:** Pytest always uses SQLite test DB and skips Redis tests if unreachable.  
+* **Smoke tests:** `make smoke` verifies API + Redis health locally and in Render.

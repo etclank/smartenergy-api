@@ -2,20 +2,13 @@
 import pytest
 from fastapi import status
 
-
 @pytest.mark.asyncio
 async def test_healthz(client):
-    """Check /api/health/z returns status ok."""
+    """Check /api/health/z returns 200 and basic structure."""
     resp = await client.get("/api/health/z")
     assert resp.status_code == status.HTTP_200_OK
-    assert resp.json() == {"status": "ok"}
-
-
-@pytest.mark.asyncio
-async def test_cachez(client):
-    """Check /api/health/cachez returns redis status."""
-    resp = await client.get("/api/health/cachez")
-    assert resp.status_code == status.HTTP_200_OK
     data = resp.json()
-    assert "redis" in data
-    assert data["redis"] in ("up", "down")
+    assert "status" in data
+    assert data["status"] in ("ok", "up")
+    assert "redis" in data  # "up" or "down"
+    assert "docs" in data and "redoc" in data

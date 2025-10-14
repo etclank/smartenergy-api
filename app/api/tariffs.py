@@ -6,10 +6,12 @@ from sqlalchemy.orm import selectinload
 from app.core.deps import get_db
 from app.models.tariff import Tariff
 from app.api.schemas.tariff import TariffOut
+from app.api.utils.cache_utils import cache_response
 
 router = APIRouter(prefix="/tariffs", tags=["tariffs"])
 
 @router.get("/", response_model=list[TariffOut], status_code=status.HTTP_200_OK)
+@cache_response(ttl=300)
 async def list_tariffs(
     site_id: int | None = Query(None, description="Filter tariffs by site_id"),
     db: AsyncSession = Depends(get_db),

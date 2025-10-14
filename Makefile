@@ -5,7 +5,7 @@
 # Image / container
 IMAGE       ?= smartenergy-api
 TAG         ?= local
-NAME        ?= smartenergy-api
+APP_NAME    ?= smartenergy-api
 
 # App config
 PORT        ?= 8000
@@ -21,98 +21,109 @@ CURL        ?= curl -sSf
 DOCKER      ?= docker
 DC          ?= docker compose
 
-# ------------- Help -------------
+# ==============================
+#         HELP / META
+# ==============================
 .PHONY: help
 help:
-	@echo "Targets:"
-	@echo "  build           Build the Docker image ($(IMAGE):$(TAG))"
-	@echo "  run             Run container in the foreground (Ctrl+C to stop)"
-	@echo "  up              Run container in the background (name=$(NAME))"
-	@echo "  stop            Stop & remove the background container"
-	@echo "  logs            Tail logs from the background container"
-	@echo "  sh              Exec into the running container (sh)"
-	@echo "  smoke           Hit health/static/metrics endpoints to verify"
-	@echo "  seed            Create a demo meter via API"
-	@echo "  # compose workflow (Postgres+Redis+API)"
-	@echo "  compose-up      docker compose up --build"
-	@echo "  compose-down    docker compose down -v"
-	@echo "Vars (override like VAR=value make run): PORT, ENV, DATABASE_URL, JWT_SECRET, IMAGE, TAG, NAME"
+	@echo ""
+	@echo "SmartEnergy API — Local Workflow"
+	@echo "--------------------------------"
+	@echo "Single-container (SQLite):"
+	@echo "  make up-sqlite     → build & run FastAPI + SQLite"
+	@echo "  make logs-sqlite   → tail logs"
+	@echo "  make stop-sqlite   → stop single container"
+	@echo "  make smoke-sqlite  → run basic health checks"
+	@echo ""
+	@echo "Full stack (Postgres + Redis + API):"
+	@echo "  make up-pg         → docker compose up --build"
+	@echo "  make down-pg       → stop & remove compose stack"
+	@echo "  make logs-pg       → tail logs for all services"
+	@echo "  make smoke         → run API + Redis health checks"
+	@echo ""
+	@echo "Utilities:"
+	@echo "  make clean         → remove all containers, volumes, networks"
+	@echo "  make seed-demo     → run demo seeder inside API container"
+	@echo "--------------------------------"
+	@echo "Variables (override like VAR=value make up-sqlite):"
+	@echo "  PORT, ENV, DATABASE_URL, JWT_SECRET, IMAGE, TAG, APP_NAME"
+	@echo ""
 
-# ---------- Single-container ----------
+# ==============================
+#     SINGLE CONTAINER (SQLite)
+# ==============================
 .PHONY: build
 build:
 	$(DOCKER) build -t $(IMAGE):$(TAG) -f $(DOCKERFILE) .
 
-.PHONY: run
-run: build
-	$(DOCKER) run --rm -p $(PORT):8000 \
+.PHONY: up-sqlite
+up-sqlite: build
+	@echo "→ Starting FastAPI + SQLite container"
+	$(DOCKER) run -d \
+		--name $(APP_NAME)-sqlite \
+		-p $(PORT):8000 \
 		-e ENV=$(ENV) \
 		-e DATABASE_URL="$(DATABASE_URL)" \
 		-e JWT_SECRET="$(JWT_SECRET)" \
-		--name $(NAME)-fg \
 		$(IMAGE):$(TAG)
+	@echo "✓ Running at http://localhost:$(PORT)"
 
-.PHONY: up
-up: build
-	$(DOCKER) run -d -p $(PORT):8000 \
-		-e ENV=$(ENV) \
-		-e DATABASE_URL="$(DATABASE_URL)" \
-		-e JWT_SECRET="$(JWT_SECRET)" \
-		--name $(NAME) \
-		$(IMAGE):$(TAG)
-	@echo "Running → http://localhost:$(PORT)"
+.PHONY: stop-sqlite
+stop-sqlite:
+	-$(DOCKER) rm -f $(APP_NAME)-sqlite >/dev/null 2>&1 || true
 
-.PHONY: stop
-stop:
-	-$(DOCKER) rm -f $(NAME) >/dev/null 2>&1 || true
+.PHONY: logs-sqlite
+logs-sqlite:
+	$(DOCKER) logs -f $(APP_NAME)-sqlite
 
-.PHONY: logs
-logs:
-	$(DOCKER) logs -f $(NAME)
-
-.PHONY: sh
-sh:
-	$(DOCKER) exec -it $(NAME) sh
-
-# ---------- Quick checks ----------
 .PHONY: smoke-sqlite
 smoke-sqlite:
-	@echo "→ Checking health..."
-	@$(CURL) http://localhost:$(PORT)/api/health/z >/dev/null && echo "  /api/health/z OK"
-	@$(CURL) http://localhost:$(PORT)/site/ >/dev/null && echo "  /site/ OK"
+	@echo "→ Checking API health (SQLite mode)..."
+	@$(CURL) http://localhost:$(PORT)/api/health/z >/dev/null && echo "  /api/health/z OK" || echo "  /api/health/z FAIL"
+	@$(CURL) http://localhost:$(PORT)/site/ >/dev/null && echo "  /site/ OK" || echo "  /site/ FAIL"
 	@$(CURL) http://localhost:$(PORT)/api/meters/ >/dev/null && echo "  /api/meters/ OK" || echo "  /api/meters/ (may be empty)"
-	@echo "✓ Smoke checks passed"
+	@echo "✓ Smoke checks (SQLite) complete"
 
-.PHONY: seed
-seed:
-	@echo "→ Creating demo meter"
-	@$(CURL) -X POST http://localhost:$(PORT)/meters/ \
-		-H "Content-Type: application/json" \
-		-d '{"name":"Demo Meter","location":"Local"}' >/dev/null && echo "  Created"
-	@$(CURL) http://localhost:$(PORT)/meters/ | jq '.' || true
-
-# ---------- docker-compose stack ----------
+# ==============================
+#   FULL STACK (Postgres+Redis)
+# ==============================
 .PHONY: up-pg
 up-pg:
 	@echo "→ Starting Postgres + Redis + API stack (deployment parity mode)"
 	$(DC) up --build -d
 	@echo "✓ Stack up — http://localhost:8000"
 
-.PHONY: down
-down:
-	-$(DOCKER) rm -f $(NAME) >/dev/null 2>&1 || true
-	$(DC) down -v || true
+.PHONY: down-pg
+down-pg:
+	@echo "→ Stopping Postgres + Redis + API stack"
+	$(DC) down -v --remove-orphans || true
+	@echo "✓ Stack removed"
+
+.PHONY: logs-pg
+logs-pg:
+	$(DC) logs -f --tail=50
 
 .PHONY: smoke
 smoke:
-	@echo "→ Checking health..."
+	@echo "→ Checking full stack health..."
 	@$(CURL) http://localhost:$(PORT)/api/health/z >/dev/null && echo "  /api/health/z OK" || echo "  /api/health/z FAIL"
-	@$(CURL) http://localhost:$(PORT)/api/health/cachez >/dev/null && echo "  /api/health/cachez OK" || echo "  /api/health/cachez (no Redis)"
-	@$(CURL) http://localhost:$(PORT)/site/ >/dev/null && echo "  /site/ OK"
+	@$(CURL) http://localhost:$(PORT)/api/health/cachez >/dev/null && echo "  /api/health/cachez OK" || echo "  /api/health/cachez DOWN"
+	@$(CURL) http://localhost:$(PORT)/site/ >/dev/null && echo "  /site/ OK" || echo "  /site/ FAIL"
 	@$(CURL) http://localhost:$(PORT)/api/meters/ >/dev/null && echo "  /api/meters/ OK" || echo "  /api/meters/ (may be empty)"
 	@echo "✓ Smoke checks complete"
 
+# ==============================
+#          UTILITIES
+# ==============================
 .PHONY: seed-demo
 seed-demo:
-	docker compose exec api python -m scripts.seed_demo
+	$(DC) exec api python -m scripts.seed_demo
 
+.PHONY: clean
+clean:
+	@echo "→ Cleaning up all containers, networks, and volumes..."
+	$(DC) down -v --remove-orphans || true
+	$(DOCKER) rm -f $$(docker ps -aq --filter "name=$(APP_NAME)") 2>/dev/null || true
+	$(DOCKER) volume prune -f >/dev/null || true
+	$(DOCKER) network prune -f >/dev/null || true
+	@echo "✓ Environment reset complete"

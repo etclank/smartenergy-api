@@ -34,7 +34,7 @@ async def seed() -> None:
     engine = create_async_engine(settings.database_url, pool_pre_ping=True)
     async_session = sessionmaker(bind=engine, class_=AsyncSession, expire_on_commit=False)
 
-    print(f"[seed_demo] 🚀 Starting fresh demo database seed.")
+    print("[seed_demo] 🚀 Starting fresh demo database seed.")
     print(f"[seed_demo] Using database: {settings.database_url}")
 
     try:

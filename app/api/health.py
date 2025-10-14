@@ -1,4 +1,4 @@
-# app/api/health.py
+# app/api/health.py (final aligned)
 from fastapi import APIRouter, status
 from app.core.cache import get_redis
 
@@ -6,15 +6,32 @@ router = APIRouter(prefix="/health", tags=["health"])
 
 @router.get("/z", status_code=status.HTTP_200_OK)
 async def healthz() -> dict[str, str]:
-    return {"status": "ok"}
-
-async def ping_redis() -> bool:
+    """Global health endpoint (used by Render + frontend badges)."""
+    redis_status = "down"
     try:
-        redis = await get_redis()
-        return await redis.ping()
+        client = await get_redis()
+        if client:
+            await client.ping()
+            redis_status = "up"
     except Exception:
-        return False
+        redis_status = "down"
+
+    return {
+        "status": "up",
+        "redis": redis_status,
+        "docs": "/docs",
+        "redoc": "/redoc",
+    }
+
 
 @router.get("/cachez", status_code=status.HTTP_200_OK)
 async def cachez() -> dict[str, str]:
-    return {"redis": "up" if await ping_redis() else "down"}
+    """Dedicated Redis health endpoint."""
+    try:
+        client = await get_redis()
+        if client:
+            await client.ping()
+            return {"redis": "up"}
+    except Exception:
+        pass
+    return {"redis": "down"}

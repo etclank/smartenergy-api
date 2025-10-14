@@ -1,52 +1,52 @@
-# app/cache.py
+# app/core/cache.py
 from __future__ import annotations
-
 import json
-from typing import Any, Optional, cast
-
-from redis.asyncio import Redis, from_url
-
+from typing import Any, Optional
+import redis.asyncio as redis
 from app.core.config import settings
 
-_redis: Optional[Redis] = None
+_client: Optional[redis.Redis] = None
 
 
-def _json_default(obj: Any) -> Any:
-    if hasattr(obj, "model_dump"):  # Pydantic v2 models
-        return obj.model_dump()
-    raise TypeError(f"Object of type {type(obj)!r} is not JSON serializable")
+# --- Core connection --------------------------------------------------------
+async def get_redis() -> Optional[redis.Redis]:
+    """
+    Return a singleton Redis client (Upstash or local).
+    If REDIS_URL is unset or unreachable, return None gracefully.
+    """
+    global _client
+    if _client or not settings.redis_url:
+        return _client
 
-
-async def get_redis() -> Redis:
-    """Return a singleton Redis client; soft-fail if unreachable."""
-    global _redis
-    if _redis is None:
-        _redis = from_url(
+    try:
+        _client = redis.from_url(
             settings.redis_url,
-            encoding="utf-8",
             decode_responses=True,
+            encoding="utf-8",
         )
-        try:
-            await _redis.ping()
-        except Exception:
-            # keep the client but don't crash in dev
-            pass
-    return cast(Redis, _redis)
+        await _client.ping()
+        print(f"[cache] Connected to Redis: {settings.redis_url}")
+    except Exception as e:
+        print(f"[cache] Redis unavailable ({e})")
+        _client = None
+
+    return _client
 
 
 async def close_redis() -> None:
-    global _redis
-    if _redis is not None:
+    global _client
+    if _client:
         try:
-            await _redis.close()
+            await _client.close()
         finally:
-            _redis = None
+            _client = None
 
 
+# --- Utility functions ------------------------------------------------------
 async def ping_redis() -> bool:
-    try:
-        client = await get_redis()
-    except Exception:
+    """Check if Redis is reachable."""
+    client = await get_redis()
+    if not client:
         return False
     try:
         return bool(await client.ping())
@@ -54,28 +54,27 @@ async def ping_redis() -> bool:
         return False
 
 
-async def cache_get(key: str) -> Optional[str]:
-    try:
-        client = await get_redis()
-    except Exception:
+async def cache_get(key: str) -> Optional[Any]:
+    """Retrieve cached JSON value and deserialize."""
+    client = await get_redis()
+    if not client:
         return None
     try:
-        return await client.get(key)
+        val = await client.get(key)
+        return json.loads(val) if val else None
     except Exception:
         return None
 
 
 async def cache_set(key: str, value: Any, ttl: Optional[int] = None) -> None:
-    try:
-        client = await get_redis()
-    except Exception:
+    """Serialize and store data in cache with optional TTL."""
+    client = await get_redis()
+    if not client:
         return
     try:
-        payload = value if isinstance(value, str) else json.dumps(value, default=_json_default)
-        if ttl and ttl > 0:
-            await client.setex(key, ttl, payload)
-        else:
-            await client.set(key, payload)
+        payload = value if isinstance(value, str) else json.dumps(value, default=str)
+        ttl = ttl or settings.cache_ttl_seconds
+        await client.setex(key, ttl, payload)
     except Exception:
-        # fail-open: never break API on cache errors
-        return
+        # Fail open — never break API behavior
+        pass

@@ -5,10 +5,12 @@ from sqlalchemy import select
 from app.core.deps import get_db
 from app.models.site import Site
 from app.api.schemas.site import SiteOut
+from app.api.utils.cache_utils import cache_response
 
 router = APIRouter(prefix="/sites", tags=["sites"])
 
 @router.get("/", response_model=list[SiteOut], status_code=status.HTTP_200_OK)
+@cache_response(ttl=60)
 async def list_sites(db: AsyncSession = Depends(get_db)) -> list[SiteOut]:
     """Return all available sites."""
     res = await db.execute(select(Site))

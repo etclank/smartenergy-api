@@ -5,10 +5,12 @@ from sqlalchemy import select
 from app.core.deps import get_db
 from app.models.max_power import MaxPower
 from app.api.schemas.energy import MaxPowerOut
+from app.api.utils.cache_utils import cache_response
 
 router = APIRouter(prefix="/max_power", tags=["energy"])
 
 @router.get("/", response_model=list[MaxPowerOut], status_code=status.HTTP_200_OK)
+@cache_response(ttl=120)
 async def list_max_power(
     meter_id: int | None = Query(None),
     db: AsyncSession = Depends(get_db),

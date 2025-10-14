@@ -27,7 +27,9 @@ services:
 
       # --- Redis (optional) ---
       - key: REDIS_URL
-        value: ""
+        value: "rediss://:REMOVED_SECRET@oriented-ewe-24218.upstash.io:6379"
+      - key: CACHE_TTL_SECONDS
+        value: "60"
 
       # --- Auth ---
       - key: JWT_SECRET

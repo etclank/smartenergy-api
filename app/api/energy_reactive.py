@@ -5,10 +5,12 @@ from sqlalchemy import select
 from app.core.deps import get_db
 from app.models.energy_reactive import EnergyReactive
 from app.api.schemas.energy import EnergyReactiveOut
+from app.api.utils.cache_utils import cache_response
 
 router = APIRouter(prefix="/energy_reactive", tags=["energy"])
 
 @router.get("/", response_model=list[EnergyReactiveOut], status_code=status.HTTP_200_OK)
+@cache_response(ttl=60)
 async def list_energy_reactive(
     meter_id: int | None = Query(None),
     db: AsyncSession = Depends(get_db),
