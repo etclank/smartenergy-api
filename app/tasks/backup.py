@@ -2,7 +2,8 @@ from __future__ import annotations
 from datetime import datetime
 from pathlib import Path
 from app.core.config import settings
-import shutil, os
+import shutil
+import os
 
 async def backup_db_snapshot() -> dict:
     """
