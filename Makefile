@@ -127,3 +127,36 @@ clean:
 	$(DOCKER) volume prune -f >/dev/null || true
 	$(DOCKER) network prune -f >/dev/null || true
 	@echo "✓ Environment reset complete"
+
+# ==============================
+#          Worker + tasks
+# ==============================
+.PHONY: worker
+worker: ## Run Celery worker with Beat scheduler
+	docker compose up worker
+
+.PHONY: tasks-refresh
+tasks-refresh: ## Trigger manual KPI refresh
+	curl -s -X POST http://localhost:8000/api/tasks/refresh-kpis | jq
+
+.PHONY: tasks-warm
+tasks-warm: ## Trigger manual cache warmup
+	curl -s -X POST http://localhost:8000/api/tasks/cache/warmup | jq
+
+.PHONY: tasks-backup
+tasks-backup:
+	curl -s -X POST http://localhost:8000/api/tasks/backup/db | jq
+
+.PHONY: tasks-email
+tasks-email:
+	curl -s -X POST http://localhost:8000/api/tasks/email/health | jq
+
+
+# ==============================
+#          Pytest
+# ==============================
+.PHONY: test
+test:
+	@echo "→ Running pytest suite (SQLite mode)"
+	poetry run pytest -q
+

@@ -1,6 +1,6 @@
 <mxfile host="65bd71144e">
-    <diagram id="8veynPXo4ZQENYFpeblk" name="SmartEnergy DB Model">
-        <mxGraphModel dx="951" dy="1566" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="827" pageHeight="1169" math="0" shadow="0">
+    <diagram id="xMkzuJJHbO1elDFX97Wg" name="SmartEnergy DB Model">
+        <mxGraphModel dx="644" dy="1668" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="827" pageHeight="1169" math="0" shadow="0">
             <root>
                 <mxCell id="0"/>
                 <mxCell id="1" parent="0"/>
@@ -28,25 +28,37 @@
                 <mxCell id="9" value="MAX_POWER&#xa;id PK:int&#xa;timestamp:datetime&#xa;measure_value:float&#xa;meter_id FK:int" style="shape=table;whiteSpace=wrap;html=1;container=1;recursiveResize=0;rounded=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=13;fontStyle=1" vertex="1" parent="1">
                     <mxGeometry x="920" y="500" width="200" height="100" as="geometry"/>
                 </mxCell>
-                <mxCell id="10" style="endArrow=classic;endFill=1;strokeWidth=2;strokeColor=#333333;entryX=0;entryY=0.5;exitX=1;exitY=0.5;" edge="1" parent="1" source="2" target="3">
+                <mxCell id="10" value="SUMMARY_KPI&#xa;id PK:int&#xa;date:date&#xa;site_id FK:int&#xa;imported_kwh:float&#xa;exported_kwh:float&#xa;avg_max_power:float" style="shape=table;whiteSpace=wrap;html=1;container=1;recursiveResize=0;rounded=1;fillColor=#cce5ff;strokeColor=#4a90e2;fontSize=13;fontStyle=1" vertex="1" parent="1">
+                    <mxGeometry x="1220" y="60" width="230" height="130" as="geometry"/>
+                </mxCell>
+                <mxCell id="11" value="SYSTEM_METRICS&#xa;id PK:int&#xa;timestamp:datetime&#xa;db_latency_ms:int&#xa;redis_latency_ms:int&#xa;row_counts:json" style="shape=table;whiteSpace=wrap;html=1;container=1;recursiveResize=0;rounded=1;fillColor=#ccf2d7;strokeColor=#57a773;fontSize=13;fontStyle=1" vertex="1" parent="1">
+                    <mxGeometry x="1220" y="240" width="230" height="130" as="geometry"/>
+                </mxCell>
+                <mxCell id="12" value="SUMMARY_EVENT&#xa;id PK:int&#xa;timestamp:datetime&#xa;event_type:str&#xa;payload:json" style="shape=table;whiteSpace=wrap;html=1;container=1;recursiveResize=0;rounded=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=13;fontStyle=1" vertex="1" parent="1">
+                    <mxGeometry x="1220" y="420" width="230" height="120" as="geometry"/>
+                </mxCell>
+                <mxCell id="13" style="endArrow=classic;endFill=1;strokeWidth=2;strokeColor=#333333;entryX=0;entryY=0.5;exitX=1;exitY=0.5;" edge="1" parent="1" source="2" target="3">
                     <mxGeometry relative="1" as="geometry"/>
                 </mxCell>
-                <mxCell id="11" style="endArrow=classic;endFill=1;strokeWidth=2;strokeColor=#333333;entryX=0;entryY=0.5;exitX=1;exitY=0.5;" edge="1" parent="1" source="3" target="4">
+                <mxCell id="14" style="endArrow=classic;endFill=1;strokeWidth=2;strokeColor=#333333;entryX=0;entryY=0.5;exitX=1;exitY=0.5;" edge="1" parent="1" source="3" target="4">
                     <mxGeometry relative="1" as="geometry"/>
                 </mxCell>
-                <mxCell id="12" style="endArrow=classic;endFill=1;strokeWidth=2;strokeColor=#333333;entryX=0.5;entryY=0;exitX=0.5;exitY=1;" edge="1" parent="1" source="3" target="5">
+                <mxCell id="15" style="endArrow=classic;endFill=1;strokeWidth=2;strokeColor=#333333;entryX=0.5;entryY=0;exitX=0.5;exitY=1;" edge="1" parent="1" source="3" target="5">
                     <mxGeometry relative="1" as="geometry"/>
                 </mxCell>
-                <mxCell id="13" style="endArrow=classic;strokeColor=#333333;endFill=1;" edge="1" parent="1" source="4" target="6">
+                <mxCell id="16" style="endArrow=classic;strokeColor=#333333;endFill=1;" edge="1" parent="1" source="4" target="6">
                     <mxGeometry relative="1" as="geometry"/>
                 </mxCell>
-                <mxCell id="14" style="endArrow=classic;strokeColor=#333333;endFill=1;" edge="1" parent="1" source="4" target="7">
+                <mxCell id="17" style="endArrow=classic;strokeColor=#333333;endFill=1;" edge="1" parent="1" source="4" target="7">
                     <mxGeometry relative="1" as="geometry"/>
                 </mxCell>
-                <mxCell id="15" style="endArrow=classic;strokeColor=#333333;endFill=1;" edge="1" parent="1" source="4" target="8">
+                <mxCell id="18" style="endArrow=classic;strokeColor=#333333;endFill=1;" edge="1" parent="1" source="4" target="8">
                     <mxGeometry relative="1" as="geometry"/>
                 </mxCell>
-                <mxCell id="16" style="endArrow=classic;strokeColor=#333333;endFill=1;" edge="1" parent="1" source="4" target="9">
+                <mxCell id="19" style="endArrow=classic;strokeColor=#333333;endFill=1;" edge="1" parent="1" source="4" target="9">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="20" style="endArrow=classic;strokeColor=#333333;endFill=1;" edge="1" parent="1" source="3" target="10">
                     <mxGeometry relative="1" as="geometry"/>
                 </mxCell>
             </root>

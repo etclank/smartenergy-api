@@ -15,9 +15,9 @@ WORKDIR /app
 # -----------------------------
 # System dependencies
 # -----------------------------
-# - build-essential, gcc: required for compiling some Python deps
-# - curl: for health/debug usage
-# - postgresql-client: provides pg_isready for prestart.sh
+# build-essential, gcc: compile native deps
+# curl: for health/debug usage
+# postgresql-client: provides pg_isready for prestart.sh
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     gcc \
@@ -27,7 +27,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     postgresql-client \
  && rm -rf /var/lib/apt/lists/*
-
 
 # -----------------------------
 # Install Poetry and dependencies
@@ -46,13 +45,33 @@ COPY . /app
 # Ensure prestart script is executable
 RUN chmod +x /app/scripts/prestart.sh
 
+# -----------------------------
+# Optional environment variables for flexibility
+# -----------------------------
+ARG APP_MODULE="app.main:app"
+ENV APP_MODULE=${APP_MODULE}
+ENV HOST=0.0.0.0
+ENV PORT=8000
+
+# -----------------------------
+# Healthcheck (basic HTTP ping)
+# -----------------------------
+HEALTHCHECK --interval=30s --timeout=5s --start-period=15s \
+  CMD curl -fs http://localhost:8000/api/health/z || exit 1
+
+# -----------------------------
+# Expose API port
+# -----------------------------
 EXPOSE 8000
 
 # -----------------------------
 # Entrypoint
 # -----------------------------
-# The prestart script:
+# Default entrypoint runs prestart.sh which:
 #  - Waits for Postgres
 #  - Runs lightweight DB init (create_all + seed)
 #  - Starts Uvicorn
+#
+# Celery worker service overrides this in docker-compose:
+#   command: celery -A app.tasks.worker worker -B --loglevel=info
 CMD ["/app/scripts/prestart.sh"]

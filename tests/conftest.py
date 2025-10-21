@@ -8,10 +8,16 @@ from app.main import app
 from app.models.base import Base
 from app.core import deps  # for dependency override
 
+import os
+from app.core import config
+
 # ---------------------------------------------------------------------
 # Always use SQLite for testing
 # ---------------------------------------------------------------------
 TEST_DATABASE_URL = "sqlite+aiosqlite:///./test.db"
+# Override global settings so background tasks use SQLite too
+os.environ["DATABASE_URL"] = TEST_DATABASE_URL
+config.settings.database_url = TEST_DATABASE_URL
 
 engine = create_async_engine(TEST_DATABASE_URL, echo=False, future=True)
 TestingSessionLocal = sessionmaker(bind=engine, class_=AsyncSession, expire_on_commit=False)

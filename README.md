@@ -14,18 +14,21 @@ Includes a static **demo dashboard** (`/site`) visualizing live API data.
 
 ---
 
-## 🚀 Tech Stack
+## 🚀 Tech Stack (updated for Stage 2.4)
 
 
-| Layer | Choice | Notes |
-|:--|:--|:--|
-| Runtime | **Python 3.13** | Poetry-managed |
-| Web API | **FastAPI 0.115+** | Async REST + auto Swagger/ReDoc |
-| Database | **SQLite (dev)** / **Postgres (prod)** | Async SQLAlchemy 2.x (create_all init) |
-| Cache | **Redis 7 (local)** / **Upstash (Render)** | Cached responses for `/energy_*` & metadata |
-| Auth | **JWT (python-jose)** | `/auth/login`, `/auth/me` |
-| CI/CD | **GitHub Actions + Codecov** | Ruff · mypy · pytest · coverage |
-| Demo UI | **Static HTML + Chart.js** | Served under `/site` |
+| Layer            | Choice                                     | Notes                                                           |
+| :--------------- | :----------------------------------------- | :-------------------------------------------------------------- |
+| Runtime          | **Python 3.13**                            | Poetry-managed environment                                      |
+| Web API          | **FastAPI 0.115+**                         | Async REST + auto Swagger/ReDoc                                 |
+| Database         | **SQLite (dev)** / **PostgreSQL (prod)**   | Async SQLAlchemy 2.x (create_all init)                          |
+| Cache / Broker   | **Redis 7 (local)** / **Upstash (Render)** | Used for API caching + Celery message broker                    |
+| Auth             | **JWT (python-jose)**                      | `/auth/login`, `/auth/me`                                       |
+| Background Jobs  | **Celery 5 + Redis Beat**                  | Periodic tasks for KPI refresh, cache cleanup, metrics, backups |
+| DevOps Utilities | **SendGrid (optional)**                    | Daily health email + DB snapshot tasks                          |
+| CI/CD            | **GitHub Actions + Codecov**               | Ruff · mypy · pytest · coverage                                 |
+| Demo UI          | **Static HTML + Chart.js**                 | Served under `/site` (showing live API status + KPIs)           |
+
 
 ---
 
@@ -71,6 +74,10 @@ Includes a static **demo dashboard** (`/site`) visualizing live API data.
 │   │   ├── energy_exported.py      # Hourly exported energy readings
 │   │   ├── energy_reactive.py      # Reactive energy readings
 │   │   ├── max_power.py            # Daily maximum power values
+│   │   ├── summary_kpi.py          # daily KPI summaries per site
+│   │   ├── system_metrics.py       # DB + Redis latency + row counts
+│   │   ├── summary_event.py        # simple event log for future analytics
+│   │   └── __init__.py
 │   │   └── __init__.py
 │   │
 │   ├── api/                        # REST API routes & schemas
@@ -84,6 +91,7 @@ Includes a static **demo dashboard** (`/site`) visualizing live API data.
 │   │   ├── energy_exported.py      # /api/energy_exported
 │   │   ├── energy_reactive.py      # /api/energy_reactive
 │   │   ├── max_power.py            # /api/max_power
+│   │   ├── tasks.py                # /api/tasks/* endpoints for manual triggers
 │   │   ├── utils/                    # Utility modules for API layer
 │   │   │   └── cache_utils.py        # Stage 2.3: @cache_response decorator for Redis caching
 │   │   └── schemas/                # Pydantic request/response models
@@ -98,9 +106,15 @@ Includes a static **demo dashboard** (`/site`) visualizing live API data.
 │   │   ├── user_service.py         # Example service for user creation/validation
 │   │   └── meter_service.py        # Example service for meter logic
 │   │
-│   ├── tasks/                      # Background jobs (future Celery/Dramatiq tasks)
+│   ├── tasks/                      # Celery + async background tasks
 │   │   ├── __init__.py
-│   │   └── refresh_meter.py        # Example placeholder for periodic data refresh
+│   │   ├── demo_data.py            # generate_demo_data / clean_demo_data
+│   │   ├── refresh_kpis.py         # compute daily KPIs into summary_kpi
+│   │   ├── cache_tasks.py          # clean_stale_cache / warmup_cache
+│   │   ├── metrics_tasks.py        # record_system_metrics / update_meta_cache
+│   │   ├── backup.py               # backup_db_snapshot (Postgres pg_dump or SQLite copy)
+│   │   ├── email.py                # send_health_email via SendGrid (optional)
+│   │   └── worker.py               # Celery + Beat scheduler configuration
 │   │
 │   ├── telemetry/                  # Observability & monitoring stubs
 │   │   └── __init__.py
@@ -168,7 +182,8 @@ Includes a static **demo dashboard** (`/site`) visualizing live API data.
     ├── test_energy_endpoints.py    # Energy route coverage
     ├── test_tariff.py              # Tariff endpoints
     ├── test_cache.py               #  verifies Redis caching + fail-open behavior
-    └── __pycache__/                # Compiled cache (ignored in VCS)
+    ├── test_tasks_integration.py   # endpoint tests for /api/tasks/*
+    └── test_worker_tasks.py        # direct task execution tests
 
 ```
 
@@ -275,6 +290,64 @@ make smoke
 Codecov badge assumes you’ve connected the repo in Codecov and are uploading coverage from CI.
 
 
+## 🧮 Background Jobs & Automation
+
+### Highlights
+SmartEnergy API Stage 2.4 introduces real, production-style background processing and DevOps utilities powered by Celery + Redis.
+| Category             | Tasks                                                           | Purpose                                                                     |
+| -------------------- | --------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| **Data lifecycle**   | `generate_demo_data(days)` / `clean_demo_data(older_than_days)` | Extend or trim demo readings weekly / monthly                               |
+| **Analytics**        | `refresh_kpis()`                                                | Aggregate daily site KPIs into `summary_kpi` table                          |
+| **Cache lifecycle**  | `clean_stale_cache()` / `warmup_cache()`                        | Clear expired Redis keys and pre-populate hot endpoints                     |
+| **System metrics**   | `record_system_metrics()` / `update_meta_cache()`               | Measure DB + Redis latency, table counts, and update `meta:api`             |
+| **DevOps utilities** | `backup_db_snapshot()` / `send_health_email()`                  | Snapshot Postgres / SQLite → `/app/backups`; optional SendGrid daily report |
+
+
+### 🔁 Two Execution Modes
+| Mode                     | Trigger             | Where it runs                 | Description                                                  |
+| ------------------------ | ------------------- | ----------------------------- | ------------------------------------------------------------ |
+| **HTTP on-demand**       | `POST /api/tasks/*` | FastAPI via `BackgroundTasks` | Non-blocking immediate runs; works even without Celery       |
+| **Scheduled automation** | Celery Beat cron    | Separate `worker` container   | Periodic jobs: KPIs daily, metrics 10 min, cache daily, etc. |
+
+### 📅 Celery Beat Schedule
+```bash
+celery_app.conf.beat_schedule = {
+    "kpis-refresh-daily":    {"task": "kpis.refresh",     "schedule": 60*60*24},
+    "demo-generate-weekly":  {"task": "demo.generate",    "schedule": 60*60*24*7},
+    "demo-clean-weekly":     {"task": "demo.clean",       "schedule": 60*60*24*7},
+    "cache-clean-daily":     {"task": "cache.clean",      "schedule": 60*60*24},
+    "cache-warmup-daily":    {"task": "cache.warmup",     "schedule": 60*60*24},
+    "metrics-every-10m":     {"task": "metrics.record",   "schedule": 600},
+    "meta-update-hourly":    {"task": "meta.update",      "schedule": 3600},
+    "backup-db-daily":       {"task": "backup.db",        "schedule": 60*60*24},
+    "health-email-daily":    {"task": "email.health",     "schedule": 60*60*24},
+}
+```
+
+### Flow
+```bash
++-------------+      +-------------+        +-----------+
+|  FastAPI    | ---> |  Redis      | <----> |  Celery   |
+|  /api/tasks |      |  (broker)   |        |  Worker+Beat |
++-------------+      +-------------+        +-----------+
+       |                     |                     |
+       |   async SQLAlchemy   |                     |
+       +--------------------->|   PostgreSQL / SQLite|
+                              +----------------------+
+```
+- FastAPI exposes manual task endpoints.
+- Redis acts as both Celery broker and cache store.
+- Celery worker + beat (separate container) executes and schedules all jobs.
+- PostgreSQL / SQLite stores metrics and summaries.
+
+## 🧰 Local Testing
+```bash
+make up-pg         # start Postgres + Redis + API + Worker
+make smoke         # health check
+make tasks-refresh # trigger KPI refresh
+make logs-pg       # watch worker executing beat jobs
+```
+
 ## 🔮 Future Enhancements / Next Architecture Iteration
 
 ```bash
@@ -327,10 +400,6 @@ MIT — see LICENSE.
 **Goal:** Transition the SmartEnergy API from a working MVP into a production-style backend service that demonstrates advanced FastAPI + DevOps maturity.
 Each phase builds incrementally on the deployed app while remaining free-tier-friendly.
 
-## 🚀 Phase 2 — Production-Style Backend + Frontend Evolution
-
-> Goal: Transform SmartEnergy from a working MVP into a production-grade FastAPI platform demonstrating relational modeling, caching, observability, and a cohesive static frontend — all deployable on free-tier cloud services.
-
 | Stage   | Focus                                         | Key Deliverables                                                                                                                                                                                  |
 | :------ | :-------------------------------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | **2.0** | 🧱 **Relational Data Model Foundation**       | Normalize schema across **Users**, **Sites**, **Meters**, **Tariffs**, and **Energy Readings**. Implement SQLAlchemy 2.x models, Alembic migrations, and CRUD routes with typed Pydantic schemas. |
@@ -342,16 +411,69 @@ Each phase builds incrementally on the deployed app while remaining free-tier-fr
 | **2.6** | 🧪 **Testing & CI Hardening**                 | Achieve ≥ 90 % pytest coverage, enforce mypy + Ruff checks via GitHub Actions, and upload coverage to Codecov.                                                                                    |
 | **2.7** | 📘 **Documentation & Deployment Polish**      | Finalize architecture diagrams, update README + Makefile targets, include `render.yaml` deployment guide, and produce a short demo video.                                                         |
 
-## ⚙️ Stage 2.3 — Caching & Performance Layer (✅ Completed)
+## 🧮 Stage 2.4 — Background Jobs & Automation (✅ Completed)
 
 ### Highlights
-* **New module:** `app/core/cache.py` – async Redis client with graceful fail-open.  
-* **Decorator:** `@cache_response(ttl=…)` in `app/api/utils/cache_utils.py` adds transparent response caching.  
-* **Endpoints cached:**  
-  * `/api/energy_imported`, `/api/energy_exported`, `/api/energy_reactive` → TTL 60 s  
-  * `/api/max_power` → TTL 120 s  
-  * `/api/tariffs`, `/api/sites`, `/api/meters` → TTL 30–300 s  
-* **Health endpoint enhanced:** `/api/health/z` now reports Redis status (`"up"` / `"down"`) + doc links.  
-* **Frontend badges:** `/site/index.html` displays API and Redis connectivity live.  
-* **Tests:** Pytest always uses SQLite test DB and skips Redis tests if unreachable.  
-* **Smoke tests:** `make smoke` verifies API + Redis health locally and in Render.
+SmartEnergy API Stage 2.4 introduces real, production-style background processing and DevOps utilities powered by Celery + Redis.
+| Category             | Tasks                                                           | Purpose                                                                     |
+| -------------------- | --------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| **Data lifecycle**   | `generate_demo_data(days)` / `clean_demo_data(older_than_days)` | Extend or trim demo readings weekly / monthly                               |
+| **Analytics**        | `refresh_kpis()`                                                | Aggregate daily site KPIs into `summary_kpi` table                          |
+| **Cache lifecycle**  | `clean_stale_cache()` / `warmup_cache()`                        | Clear expired Redis keys and pre-populate hot endpoints                     |
+| **System metrics**   | `record_system_metrics()` / `update_meta_cache()`               | Measure DB + Redis latency, table counts, and update `meta:api`             |
+| **DevOps utilities** | `backup_db_snapshot()` / `send_health_email()`                  | Snapshot Postgres / SQLite → `/app/backups`; optional SendGrid daily report |
+
+### 🗂️ New Modules and Tables
+| File                           | Purpose                                           |
+| ------------------------------ | ------------------------------------------------- |
+| `app/models/summary_kpi.py`    | Daily KPI summaries per site                      |
+| `app/models/system_metrics.py` | DB + Redis latency + row counts                   |
+| `app/models/summary_event.py`  | Simple event log                                  |
+| `app/api/tasks.py`             | Manual trigger endpoints under `/api/tasks/*`     |
+| `app/tasks/*.py`               | Async task logic for data, cache, metrics, DevOps |
+| `app/tasks/worker.py`          | Celery + Beat scheduler configuration             |
+
+### 🔁 Two Execution Modes
+| Mode                     | Trigger             | Where it runs                 | Description                                                  |
+| ------------------------ | ------------------- | ----------------------------- | ------------------------------------------------------------ |
+| **HTTP on-demand**       | `POST /api/tasks/*` | FastAPI via `BackgroundTasks` | Non-blocking immediate runs; works even without Celery       |
+| **Scheduled automation** | Celery Beat cron    | Separate `worker` container   | Periodic jobs: KPIs daily, metrics 10 min, cache daily, etc. |
+
+### 📅 Celery Beat Schedule
+```bash
+celery_app.conf.beat_schedule = {
+    "kpis-refresh-daily":    {"task": "kpis.refresh",     "schedule": 60*60*24},
+    "demo-generate-weekly":  {"task": "demo.generate",    "schedule": 60*60*24*7},
+    "demo-clean-weekly":     {"task": "demo.clean",       "schedule": 60*60*24*7},
+    "cache-clean-daily":     {"task": "cache.clean",      "schedule": 60*60*24},
+    "cache-warmup-daily":    {"task": "cache.warmup",     "schedule": 60*60*24},
+    "metrics-every-10m":     {"task": "metrics.record",   "schedule": 600},
+    "meta-update-hourly":    {"task": "meta.update",      "schedule": 3600},
+    "backup-db-daily":       {"task": "backup.db",        "schedule": 60*60*24},
+    "health-email-daily":    {"task": "email.health",     "schedule": 60*60*24},
+}
+```
+
+### Flow
+```bash
++-------------+      +-------------+        +-----------+
+|  FastAPI    | ---> |  Redis      | <----> |  Celery   |
+|  /api/tasks |      |  (broker)   |        |  Worker+Beat |
++-------------+      +-------------+        +-----------+
+       |                     |                     |
+       |   async SQLAlchemy   |                     |
+       +--------------------->|   PostgreSQL / SQLite|
+                              +----------------------+
+```
+- FastAPI exposes manual task endpoints.
+- Redis acts as both Celery broker and cache store.
+- Celery worker + beat (separate container) executes and schedules all jobs.
+- PostgreSQL / SQLite stores metrics and summaries.
+
+## 🧰 Local Testing
+```bash
+make up-pg         # start Postgres + Redis + API + Worker
+make smoke         # health check
+make tasks-refresh # trigger KPI refresh
+make logs-pg       # watch worker executing beat jobs
+```
