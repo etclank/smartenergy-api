@@ -69,10 +69,10 @@ services:
 
       # Sync secrets from the web service
       - key: JWT_SECRET
-        sync: smartenergy-api:JWT_SECRET
+        sync: false
       - key: SENDGRID_API_KEY
-        sync: smartenergy-api:SENDGRID_API_KEY
+        sync: false
       - key: SENDGRID_FROM_EMAIL
-        sync: smartenergy-api:SENDGRID_FROM_EMAIL
+        sync: false
       - key: HEALTH_EMAIL_TO
-        sync: smartenergy-api:HEALTH_EMAIL_TO
+        sync: false
