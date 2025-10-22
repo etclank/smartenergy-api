@@ -12,20 +12,19 @@ services:
     dockerfilePath: ./docker/Dockerfile
 
     envVars:
+      - key: ROLE
+        value: web
       # --- Environment ---
       - key: ENV
         value: prod
-
       # --- Database (Persistent Postgres) ---
       - key: DATABASE_URL
         value: "postgresql+asyncpg://smartenergy_db_user:REMOVED_SECRET@dpg-d3kechpr0fns73er9p60-a/smartenergy_db"
-
       # --- Redis (Upstash example) ---
       - key: REDIS_URL
         value: "rediss://:REMOVED_SECRET@oriented-ewe-24218.upstash.io:6379"
       - key: CACHE_TTL_SECONDS
         value: "60"
-
       # --- JWT ---
       - key: JWT_SECRET
         generateValue: true
@@ -33,11 +32,9 @@ services:
         value: HS256
       - key: JWT_EXPIRE_MINUTES
         value: "60"
-
       # --- Demo data ---
       - key: SEED_DEMO
         value: "1"
-
       # --- SendGrid (optional for health email) ---
       - key: SENDGRID_API_KEY
         sync: false
@@ -45,7 +42,6 @@ services:
         sync: false
       - key: SENDGRID_FROM_EMAIL
         sync: false
-
       # --- Logging ---
       - key: LOG_LEVEL
         value: "info"
@@ -57,16 +53,15 @@ services:
     plan: free
     region: frankfurt
     dockerfilePath: ./docker/Dockerfile
-    startCommand: celery -A app.tasks.worker.celery_app worker --beat --loglevel=info
     envVars:
+      - key: ROLE
+        value: worker
       - key: ENV
         value: prod
-
       - key: DATABASE_URL
         value: "postgresql+asyncpg://smartenergy_db_user:REMOVED_SECRET@dpg-d3kechpr0fns73er9p60-a/smartenergy_db"
       - key: REDIS_URL
         value: "rediss://:REMOVED_SECRET@oriented-ewe-24218.upstash.io:6379"
-
       # Sync secrets from the web service
       - key: JWT_SECRET
         sync: false

@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-echo "[prestart] ENV=${ENV:-} DATABASE_URL=${DATABASE_URL:-<empty>}"
+ROLE="${ROLE:-web}"  # Default role is 'web'
+echo "[prestart] Starting SmartEnergy in ROLE=${ROLE}"
+echo "[prestart] ENV=${ENV:-} DATABASE_URL=${DATABASE_URL:-<empty>} REDIS_URL=${REDIS_URL:-<empty>}"
 
 # Wait for Postgres if needed
 if [[ "${DATABASE_URL:-}" == postgresql* ]]; then
@@ -20,8 +22,17 @@ if [[ "${DATABASE_URL:-}" == postgresql* ]]; then
   done
 fi
 
-echo "[prestart] Initializing database..."
-python -m scripts.init_db
+# ------------------------------------------
+# Role-based startup
+# ------------------------------------------
+if [[ "$ROLE" == "worker" ]]; then
+  echo "[prestart] Launching Celery worker + Beat..."
+  exec celery -A app.tasks.worker.celery_app worker --beat --loglevel=info
 
-echo "[prestart] Starting app..."
-exec uvicorn app.main:app --host 0.0.0.0 --port "${PORT:-8000}"
+else
+  echo "[prestart] Initializing database..."
+  python -m scripts.init_db
+
+  echo "[prestart] Starting FastAPI (Uvicorn)..."
+  exec uvicorn app.main:app --host 0.0.0.0 --port "${PORT:-8000}"
+fi
