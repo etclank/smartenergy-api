@@ -16,11 +16,6 @@ services:
       - key: ENV
         value: prod
 
-
-      # Option A — Ephemeral SQLite (free tier)
-      # - key: DATABASE_URL
-      #   value: "sqlite+aiosqlite:////tmp/app.db"
-
       # --- Database (Persistent Postgres) ---
       - key: DATABASE_URL
         value: "postgresql+asyncpg://smartenergy_db_user:REMOVED_SECRET@dpg-d3kechpr0fns73er9p60-a/smartenergy_db"
@@ -55,34 +50,29 @@ services:
       - key: LOG_LEVEL
         value: "info"
 
-# -------------------------------------
-# Render Cron Jobs (Free-tier compatible)
-# -------------------------------------
-cronJobs:
-  - name: refresh-kpis
-    schedule: "@daily"
-    command: curl -s -X POST https://smartenergy-api.onrender.com/api/tasks/refresh-kpis
+  # 🧠 Celery Worker + Beat
+  - type: worker
+    name: smartenergy-worker
+    env: docker
+    plan: free
+    region: frankfurt
+    dockerfilePath: ./docker/Dockerfile
+    startCommand: celery -A app.tasks.worker.celery_app worker --beat --loglevel=info
+    envVars:
+      - key: ENV
+        value: prod
 
-  - name: clean-cache
-    schedule: "@daily"
-    command: curl -s -X POST https://smartenergy-api.onrender.com/api/tasks/cache/clean
+      - key: DATABASE_URL
+        value: "postgresql+asyncpg://smartenergy_db_user:REMOVED_SECRET@dpg-d3kechpr0fns73er9p60-a/smartenergy_db"
+      - key: REDIS_URL
+        value: "rediss://:REMOVED_SECRET@oriented-ewe-24218.upstash.io:6379"
 
-  - name: warmup-cache
-    schedule: "@daily"
-    command: curl -s -X POST https://smartenergy-api.onrender.com/api/tasks/cache/warmup
-
-  - name: record-metrics
-    schedule: "0 */6 * * *"  # every 6 hours
-    command: curl -s -X POST https://smartenergy-api.onrender.com/api/tasks/metrics/record
-
-  - name: generate-demo
-    schedule: "@daily"
-    command: curl -s -X POST https://smartenergy-api.onrender.com/api/tasks/demo/generate
-
-  - name: clean-demo
-    schedule: "@daily"
-    command: curl -s -X POST https://smartenergy-api.onrender.com/api/tasks/demo/clean
-
-  - name: health-email
-    schedule: "@daily"
-    command: curl -s -X POST https://smartenergy-api.onrender.com/api/tasks/email/health
+      # Sync secrets from the web service
+      - key: JWT_SECRET
+        sync: smartenergy-api:JWT_SECRET
+      - key: SENDGRID_API_KEY
+        sync: smartenergy-api:SENDGRID_API_KEY
+      - key: SENDGRID_FROM_EMAIL
+        sync: smartenergy-api:SENDGRID_FROM_EMAIL
+      - key: HEALTH_EMAIL_TO
+        sync: smartenergy-api:HEALTH_EMAIL_TO
