@@ -37,3 +37,10 @@ async def test_backup_and_email_tasks(client):
     b = await client.post("/api/tasks/backup/db")
     e = await client.post("/api/tasks/email/health")
     assert b.status_code == e.status_code == status.HTTP_202_ACCEPTED
+
+@pytest.mark.asyncio
+async def test_trigger_record_metrics_endpoint(client):
+    resp = await client.post("/api/tasks/metrics/record")
+    assert resp.status_code in (202, 200)
+    data = resp.json()
+    assert "record" in str(data).lower()

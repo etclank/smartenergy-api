@@ -2,23 +2,35 @@
 """
 Reusable decorator for caching FastAPI GET responses in Redis.
 
-Usage:
-    from app.api.utils.cache_utils import cache_response
-
-    @router.get("/")
-    @cache_response(ttl=60)
-    async def list_energy_imported(...):
-        ...
+Emits Prometheus metrics for cache hits and misses.
 """
 
 from __future__ import annotations
 import json
 from functools import wraps
 from fastapi import Request
-from typing import Awaitable, Callable, Optional, TypeVar, ParamSpec
+from typing import Awaitable, Callable, Optional, TypeVar, ParamSpec, TYPE_CHECKING
+from prometheus_client import Counter
 
 from app.core.cache import cache_get, cache_set
 from app.core.config import settings
+
+# Type-only import to help mypy know what CACHE_HITS/CACHE_MISSES are
+if TYPE_CHECKING:
+    CACHE_HITS: Optional[Counter]
+    CACHE_MISSES: Optional[Counter]
+
+# Optional metrics integration (safe runtime import)
+try:
+    from app.api.metrics import CACHE_HITS as _CACHE_HITS, CACHE_MISSES as _CACHE_MISSES
+    _hits: Optional[Counter] = _CACHE_HITS
+    _misses: Optional[Counter] = _CACHE_MISSES
+except Exception:  # pragma: no cover
+    _hits = None
+    _misses = None
+
+CACHE_HITS = _hits
+CACHE_MISSES = _misses
 
 P = ParamSpec("P")
 R = TypeVar("R")
@@ -29,6 +41,7 @@ def cache_response(ttl: Optional[int] = None) -> Callable[[Callable[P, Awaitable
     Decorator for caching route responses in Redis.
 
     - Uses request URL (path + query) as cache key.
+    - Emits Prometheus counters (cache_hits_total / cache_misses_total) if available.
     - Serializes/deserializes JSON transparently.
     - Fails open if Redis unavailable.
     - Skips caching entirely if REDIS_URL unset.
@@ -56,6 +69,8 @@ def cache_response(ttl: Optional[int] = None) -> Callable[[Callable[P, Awaitable
             # Try cached result
             cached = await cache_get(cache_key)
             if cached is not None:
+                if CACHE_HITS:
+                    CACHE_HITS.labels(endpoint=path).inc()
                 return cached
 
             # Compute and cache
@@ -63,8 +78,11 @@ def cache_response(ttl: Optional[int] = None) -> Callable[[Callable[P, Awaitable
             try:
                 json.dumps(response)
                 await cache_set(cache_key, response, ttl or settings.cache_ttl_seconds)
+                if CACHE_MISSES:
+                    CACHE_MISSES.labels(endpoint=path).inc()
             except Exception:
-                pass  # ignore serialization issues silently
+                # ignore serialization or connection issues silently
+                pass
 
             return response
 

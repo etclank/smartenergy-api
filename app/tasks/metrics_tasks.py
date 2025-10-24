@@ -1,3 +1,4 @@
+# app/tasks/metrics_tasks.py
 from __future__ import annotations
 
 import time
@@ -7,6 +8,7 @@ from sqlalchemy import text, select, func
 from app.core.db import get_async_engine, async_sessionmaker_dep
 from app.core.cache import get_redis
 from app.core.config import settings
+import psutil
 from app.models import (
     SystemMetrics,
     Site,
@@ -20,8 +22,8 @@ from app.models import (
 
 async def record_system_metrics() -> dict:
     """
-    Measure database and Redis latency and row counts,
-    then insert a new SystemMetrics record.
+    Measure database, Redis latency, row counts,
+    and process stats (CPU %, memory %, uptime seconds).
     """
     engine = get_async_engine()
     SessionLocal = async_sessionmaker_dep(engine)
@@ -29,10 +31,10 @@ async def record_system_metrics() -> dict:
     db_ms = redis_ms = -1
     counts: dict[str, int] = {}
 
+    # --------------------------------------------------
+    # DB ping
+    # --------------------------------------------------
     try:
-        # --------------------------------------------------
-        # DB ping
-        # --------------------------------------------------
         t0 = time.perf_counter()
         async with engine.begin() as conn:
             await conn.execute(text("SELECT 1"))
@@ -40,9 +42,9 @@ async def record_system_metrics() -> dict:
     except Exception:
         db_ms = -1
 
-    # ------------------------------------------------------
+    # --------------------------------------------------
     # Redis ping
-    # ------------------------------------------------------
+    # --------------------------------------------------
     try:
         r = await get_redis()
         if r:
@@ -52,9 +54,21 @@ async def record_system_metrics() -> dict:
     except Exception:
         redis_ms = -1
 
-    # ------------------------------------------------------
-    # Row counts
-    # ------------------------------------------------------
+    # --------------------------------------------------
+    # Process stats via psutil
+    # --------------------------------------------------
+    try:
+        proc = psutil.Process()
+        with proc.oneshot():
+            cpu_percent = psutil.cpu_percent(interval=0.1)
+            mem_percent = proc.memory_percent()
+            uptime_seconds = time.time() - proc.create_time()
+    except Exception:
+        cpu_percent = mem_percent = uptime_seconds = None
+
+    # --------------------------------------------------
+    # Row counts + insert metrics record
+    # --------------------------------------------------
     try:
         async with SessionLocal() as db:
             counts = {
@@ -65,26 +79,32 @@ async def record_system_metrics() -> dict:
                 "energy_reactive": (await db.execute(select(func.count(EnergyReactive.id)))).scalar() or 0,
                 "max_power": (await db.execute(select(func.count(MaxPower.id)))).scalar() or 0,
             }
+
             db.add(
                 SystemMetrics(
                     db_latency_ms=db_ms,
                     redis_latency_ms=redis_ms,
                     row_counts=counts,
+                    cpu_percent=cpu_percent,
+                    mem_percent=mem_percent,
+                    uptime_seconds=uptime_seconds,
                 )
             )
             await db.commit()
     except Exception:
-        # Safe fail-open: do not crash background task
-        pass
+        pass  # Safe fail-open
 
-    # ------------------------------------------------------
+    # --------------------------------------------------
     # Return summary
-    # ------------------------------------------------------
+    # --------------------------------------------------
     return {
         "status": "ok",
         "timestamp": datetime.utcnow().isoformat(),
         "db_latency_ms": db_ms,
         "redis_latency_ms": redis_ms,
+        "cpu_percent": cpu_percent,
+        "mem_percent": mem_percent,
+        "uptime_seconds": uptime_seconds,
         "row_counts": counts,
     }
 

@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>SmartEnergy – System Health</title>
+    <base href="/site/" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <link rel="stylesheet" href="/site/assets/css/style.css" />
+    <script src="/site/assets/config.js"></script>
+    <script src="/site/assets/js/api.js" defer></script>
+    <script src="/site/assets/vendor/chart.min.js"></script>
+    <script src="/site/assets/vendor/chartjs-adapter-date-fns.bundle.min.js"></script>
+    <script src="/site/assets/js/components/breadcrumb.js"></script>
+    <script src="/site/assets/js/pages/system.js" defer></script>
+  </head>
+
+  <body>
+    <div class="topbar">
+      <button id="theme-toggle" class="theme-btn">🌙</button>
+      <h1><a href="/site/">SmartEnergy</a></h1>
+      <ul class="nav">
+        <li><a href="/site/pages/sites.html">Sites</a></li>
+        <li><a href="/site/pages/meters.html">Meters</a></li>
+        <li><a href="/site/pages/tariffs.html">Tariffs</a></li>
+        <li><a href="/site/pages/system.html" class="active">System</a></li>
+        <li><a href="/docs" target="_blank" rel="noopener">Swagger</a></li>
+        <li><a href="/redoc" target="_blank" rel="noopener">ReDoc</a></li>
+      </ul>
+    </div>
+
+    <div class="container">
+      <nav id="breadcrumb" class="breadcrumb"></nav>
+
+      <h2>System Health</h2>
+      <div id="system-cards" class="grid">
+        <div class="card"><h3>CPU Usage (%)</h3><canvas id="cpuChart"></canvas></div>
+        <div class="card"><h3>Memory Usage (%)</h3><canvas id="memChart"></canvas></div>
+        <div class="card"><h3>System Uptime (hours)</h3><canvas id="uptimeChart"></canvas></div>
+      </div>
+
+      <div class="card" id="latencyCard">
+        <h3>Latency Snapshot (ms)</h3>
+        <div id="latencyStats">Loading…</div>
+      </div>
+    </div>
+  </body>
+</html>

@@ -348,6 +348,56 @@ make tasks-refresh # trigger KPI refresh
 make logs-pg       # watch worker executing beat jobs
 ```
 
+## 🔍Observability & Telemetry (✅ Completed)
+
+### 🎯 Objective
+Transform the SmartEnergy API into a fully observable platform by instrumenting telemetry, metrics, and structured logs.
+Expose Prometheus-style runtime metrics, correlate requests with traces, and visualize live system performance in the /site dashboard.
+
+### ⚙️ Configuration
+| Variable                      | Example Value                           | Description                              |
+| ----------------------------- | --------------------------------------- | ---------------------------------------- |
+| `ENABLE_TELEMETRY`            | `1` or `0`                              | Enables/disables OpenTelemetry startup.  |
+| `OTEL_SERVICE_NAME`           | `smartenergy-api`                       | Logical service name for traces/metrics. |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | `https://otlp-grafana.example.com:4318` | Optional remote OTLP export.             |
+| `OTEL_EXPORTER_OTLP_HEADERS`  | `Authorization=Bearer <token>`          | HTTP headers for remote export.          |
+| `LOG_LEVEL`                   | `INFO / DEBUG / WARNING`                | Global logging threshold.                |
+
+Default (ENABLE_TELEMETRY=0) logs to console only and exports no traces—safe for local dev.
+
+### 🧠 Design Flow
+```bash
+┌──────────────┐   HTTP   ┌──────────────┐
+│  /site/system │◀────────│  FastAPI API │
+│  Chart.js UI  │         │  + Middleware│
+└──────┬───────┘         └──────┬───────┘
+       │   /api/system_metrics   │
+       │   /api/metrics          │
+       ▼                         ▼
+  Prometheus scrape      OTLP traces/metrics/logs
+                         └──> Console / Grafana Cloud
+```
+- Middleware captures every request’s latency and increments counters.
+- record_system_metrics() persists CPU/mem stats to DB every 10 min (via Celery or Render Cron).
+- /site/pages/system.html fetches /api/system_metrics/latest for live graphs.
+
+### 🧰 Developer Verification
+```bash
+# Run API locally with telemetry disabled
+poetry run uvicorn app.main:app --reload
+
+# Run with telemetry + console exporter
+ENABLE_TELEMETRY=1 poetry run uvicorn app.main:app
+
+# Hit endpoints
+curl http://localhost:8000/api/metrics
+curl http://localhost:8000/api/system_metrics/latest
+
+# Run full test suite
+poetry run pytest -q
+poetry run mypy app
+```
+
 ## 🔮 Future Enhancements / Next Architecture Iteration
 
 ```bash
@@ -411,69 +461,71 @@ Each phase builds incrementally on the deployed app while remaining free-tier-fr
 | **2.6** | 🧪 **Testing & CI Hardening**                 | Achieve ≥ 90 % pytest coverage, enforce mypy + Ruff checks via GitHub Actions, and upload coverage to Codecov.                                                                                    |
 | **2.7** | 📘 **Documentation & Deployment Polish**      | Finalize architecture diagrams, update README + Makefile targets, include `render.yaml` deployment guide, and produce a short demo video.                                                         |
 
-## 🧮 Stage 2.4 — Background Jobs & Automation (✅ Completed)
+## 🔍 Stage 2.5 — Observability & Telemetry (✅ Completed)
 
-### Highlights
-SmartEnergy API Stage 2.4 introduces real, production-style background processing and DevOps utilities powered by Celery + Redis.
-| Category             | Tasks                                                           | Purpose                                                                     |
-| -------------------- | --------------------------------------------------------------- | --------------------------------------------------------------------------- |
-| **Data lifecycle**   | `generate_demo_data(days)` / `clean_demo_data(older_than_days)` | Extend or trim demo readings weekly / monthly                               |
-| **Analytics**        | `refresh_kpis()`                                                | Aggregate daily site KPIs into `summary_kpi` table                          |
-| **Cache lifecycle**  | `clean_stale_cache()` / `warmup_cache()`                        | Clear expired Redis keys and pre-populate hot endpoints                     |
-| **System metrics**   | `record_system_metrics()` / `update_meta_cache()`               | Measure DB + Redis latency, table counts, and update `meta:api`             |
-| **DevOps utilities** | `backup_db_snapshot()` / `send_health_email()`                  | Snapshot Postgres / SQLite → `/app/backups`; optional SendGrid daily report |
+### 🎯 Objective
+Transform the SmartEnergy API into a fully observable platform by instrumenting telemetry, metrics, and structured logs.
+Expose Prometheus-style runtime metrics, correlate requests with traces, and visualize live system performance in the /site dashboard.
 
-### 🗂️ New Modules and Tables
-| File                           | Purpose                                           |
-| ------------------------------ | ------------------------------------------------- |
-| `app/models/summary_kpi.py`    | Daily KPI summaries per site                      |
-| `app/models/system_metrics.py` | DB + Redis latency + row counts                   |
-| `app/models/summary_event.py`  | Simple event log                                  |
-| `app/api/tasks.py`             | Manual trigger endpoints under `/api/tasks/*`     |
-| `app/tasks/*.py`               | Async task logic for data, cache, metrics, DevOps |
-| `app/tasks/worker.py`          | Celery + Beat scheduler configuration             |
+### 🧱 Key Deliverables
+| Category                        | Deliverable                                                   | Description                                                                                                                                  |
+| ------------------------------- | ------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| **A. Telemetry Core**           | `app/core/telemetry.py`                                       | Initializes OpenTelemetry tracing + metrics if `ENABLE_TELEMETRY=1`.<br>Supports OTLP or console export.                                     |
+| **B. Structured Logging**       | `app/core/logging.py`                                         | Unified Loguru JSON logging (Prod) + colored human output (Dev).<br>Correlates logs with OTel trace IDs.                                     |
+| **C. Prometheus Metrics**       | `app/api/metrics.py` + middleware                             | Exposes `/api/metrics` endpoint with Prometheus exposition text.<br>Tracks `http_requests_total`, latency histograms, and cache hits/misses. |
+| **D. System Metrics Expansion** | `app/models/system_metrics.py` + `app/tasks/metrics_tasks.py` | Records CPU %, memory %, uptime seconds via `psutil`; persisted to DB.                                                                       |
+| **E. Frontend Visualization**   | `/site/pages/system.html` + `assets/js/pages/system.js`       | New System Health panel: gauges for CPU/mem + trend charts for latency.                                                                      |
+| **F. Testing & Validation**     | `tests/test_metrics_*`, `tests/test_system_metrics_api.py`    | Verifies Prometheus output and DB recording; all async pytest green.                                                                         |
 
-### 🔁 Two Execution Modes
-| Mode                     | Trigger             | Where it runs                 | Description                                                  |
-| ------------------------ | ------------------- | ----------------------------- | ------------------------------------------------------------ |
-| **HTTP on-demand**       | `POST /api/tasks/*` | FastAPI via `BackgroundTasks` | Non-blocking immediate runs; works even without Celery       |
-| **Scheduled automation** | Celery Beat cron    | Separate `worker` container   | Periodic jobs: KPIs daily, metrics 10 min, cache daily, etc. |
+### ⚙️ Configuration
+| Variable                      | Example Value                           | Description                              |
+| ----------------------------- | --------------------------------------- | ---------------------------------------- |
+| `ENABLE_TELEMETRY`            | `1` or `0`                              | Enables/disables OpenTelemetry startup.  |
+| `OTEL_SERVICE_NAME`           | `smartenergy-api`                       | Logical service name for traces/metrics. |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | `https://otlp-grafana.example.com:4318` | Optional remote OTLP export.             |
+| `OTEL_EXPORTER_OTLP_HEADERS`  | `Authorization=Bearer <token>`          | HTTP headers for remote export.          |
+| `LOG_LEVEL`                   | `INFO / DEBUG / WARNING`                | Global logging threshold.                |
 
-### 📅 Celery Beat Schedule
+Default (ENABLE_TELEMETRY=0) logs to console only and exports no traces—safe for local dev.
+
+### 🧠 Design Flow
 ```bash
-celery_app.conf.beat_schedule = {
-    "kpis-refresh-daily":    {"task": "kpis.refresh",     "schedule": 60*60*24},
-    "demo-generate-weekly":  {"task": "demo.generate",    "schedule": 60*60*24*7},
-    "demo-clean-weekly":     {"task": "demo.clean",       "schedule": 60*60*24*7},
-    "cache-clean-daily":     {"task": "cache.clean",      "schedule": 60*60*24},
-    "cache-warmup-daily":    {"task": "cache.warmup",     "schedule": 60*60*24},
-    "metrics-every-10m":     {"task": "metrics.record",   "schedule": 600},
-    "meta-update-hourly":    {"task": "meta.update",      "schedule": 3600},
-    "backup-db-daily":       {"task": "backup.db",        "schedule": 60*60*24},
-    "health-email-daily":    {"task": "email.health",     "schedule": 60*60*24},
-}
+┌──────────────┐   HTTP   ┌──────────────┐
+│  /site/system │◀────────│  FastAPI API │
+│  Chart.js UI  │         │  + Middleware│
+└──────┬───────┘         └──────┬───────┘
+       │   /api/system_metrics   │
+       │   /api/metrics          │
+       ▼                         ▼
+  Prometheus scrape      OTLP traces/metrics/logs
+                         └──> Console / Grafana Cloud
+```
+- Middleware captures every request’s latency and increments counters.
+- record_system_metrics() persists CPU/mem stats to DB every 10 min (via Celery or Render Cron).
+- /site/pages/system.html fetches /api/system_metrics/latest for live graphs.
+
+### 🧰 Developer Verification
+```bash
+# Run API locally with telemetry disabled
+poetry run uvicorn app.main:app --reload
+
+# Run with telemetry + console exporter
+ENABLE_TELEMETRY=1 poetry run uvicorn app.main:app
+
+# Hit endpoints
+curl http://localhost:8000/api/metrics
+curl http://localhost:8000/api/system_metrics/latest
+
+# Run full test suite
+poetry run pytest -q
+poetry run mypy app
 ```
 
-### Flow
-```bash
-+-------------+      +-------------+        +-----------+
-|  FastAPI    | ---> |  Redis      | <----> |  Celery   |
-|  /api/tasks |      |  (broker)   |        |  Worker+Beat |
-+-------------+      +-------------+        +-----------+
-       |                     |                     |
-       |   async SQLAlchemy   |                     |
-       +--------------------->|   PostgreSQL / SQLite|
-                              +----------------------+
-```
-- FastAPI exposes manual task endpoints.
-- Redis acts as both Celery broker and cache store.
-- Celery worker + beat (separate container) executes and schedules all jobs.
-- PostgreSQL / SQLite stores metrics and summaries.
+### 📊 Stage 2.5 Outcome
+SmartEnergy API now provides **end-to-end observability**:
+- Real-time request and cache metrics via Prometheus.
+- Automatic trace context for every API request (OpenTelemetry).
+- Structured JSON logs for searchable auditing.
+- Self-contained System Health UI with live charts.
 
-## 🧰 Local Testing
-```bash
-make up-pg         # start Postgres + Redis + API + Worker
-make smoke         # health check
-make tasks-refresh # trigger KPI refresh
-make logs-pg       # watch worker executing beat jobs
-```
+Next milestone: Stage 2.6 — Testing & CI Hardening, focusing on 90 %+ coverage, Ruff/mypy enforcement, and Codecov integration.

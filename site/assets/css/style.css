@@ -78,10 +78,13 @@ a:hover {
 }
 
 .topbar h1 {
-  justify-self: center;
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
   margin: 0;
   font-size: 1.4rem;
   text-align: center;
+  z-index: 2;
 }
 
 .topbar h1 a {
@@ -422,3 +425,23 @@ section#energy-charts {
 .btn-primary:hover {
   background: var(--accent2);
 }
+
+/* --- Systems Page --- */
+.card {
+  background: var(--bg, #fff);
+  border-radius: 1rem;
+  box-shadow: 0 0 8px rgba(0,0,0,0.1);
+  padding: 1rem;
+  text-align: center;
+}
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 1rem;
+}
+#system-cards canvas {
+  width: 100%;
+  max-width: 300px;
+  height: 220px;
+}
+
