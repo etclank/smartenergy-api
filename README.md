@@ -54,7 +54,7 @@ Includes a static **demo dashboard** (`/site`) visualizing live API data.
 .
 ├── app/
 │   ├── __init__.py
-│   ├── main.py                     # FastAPI app entrypoint (creates app, mounts routers, serves /site)
+│   ├── main.py                     # FastAPI app entrypoint: creates app, mounts routers, serves /site
 │   │
 │   ├── core/                       # Core runtime modules
 │   │   ├── config.py               # Pydantic settings: loads ENV, DATABASE_URL, JWT, etc.
@@ -62,7 +62,8 @@ Includes a static **demo dashboard** (`/site`) visualizing live API data.
 │   │   ├── security.py             # Password hashing (bcrypt) + JWT utilities
 │   │   ├── deps.py                 # Dependency injection helpers for routes
 │   │   ├── cache.py                # Optional Redis caching logic
-│   │   └── telemetry.py            # Placeholder for OpenTelemetry integration (future)
+│   │   ├── logging.py              # Unified Loguru logging (JSON in prod, color in dev)
+│   │   └── telemetry.py            # OpenTelemetry setup (traces + metrics exporter)
 │   │
 │   ├── models/                     # SQLAlchemy ORM models
 │   │   ├── base.py                 # Declarative Base + metadata
@@ -74,16 +75,15 @@ Includes a static **demo dashboard** (`/site`) visualizing live API data.
 │   │   ├── energy_exported.py      # Hourly exported energy readings
 │   │   ├── energy_reactive.py      # Reactive energy readings
 │   │   ├── max_power.py            # Daily maximum power values
-│   │   ├── summary_kpi.py          # daily KPI summaries per site
-│   │   ├── system_metrics.py       # DB + Redis latency + row counts
-│   │   ├── summary_event.py        # simple event log for future analytics
-│   │   └── __init__.py
+│   │   ├── summary_kpi.py          # Daily KPI summaries per site
+│   │   ├── system_metrics.py       # CPU/mem/uptime + DB/Redis latency + row counts
+│   │   ├── summary_event.py        # Simple event log for future analytics
 │   │   └── __init__.py
 │   │
 │   ├── api/                        # REST API routes & schemas
-│   │   ├── routers.py              # Central router registration for all endpoints
+│   │   ├── routers.py              # Central router registration
 │   │   ├── auth.py                 # /api/auth/login and /api/auth/me
-│   │   ├── health.py               # /api/healthz (service health endpoint)
+│   │   ├── health.py               # /api/healthz (service health)
 │   │   ├── sites.py                # CRUD for /api/sites
 │   │   ├── meters.py               # CRUD for /api/meters
 │   │   ├── tariffs.py              # CRUD for /api/tariffs
@@ -91,9 +91,11 @@ Includes a static **demo dashboard** (`/site`) visualizing live API data.
 │   │   ├── energy_exported.py      # /api/energy_exported
 │   │   ├── energy_reactive.py      # /api/energy_reactive
 │   │   ├── max_power.py            # /api/max_power
-│   │   ├── tasks.py                # /api/tasks/* endpoints for manual triggers
-│   │   ├── utils/                    # Utility modules for API layer
-│   │   │   └── cache_utils.py        # Stage 2.3: @cache_response decorator for Redis caching
+│   │   ├── tasks.py                # /api/tasks/* manual Celery triggers
+│   │   ├── metrics.py              # /api/metrics → Prometheus exposition endpoint
+│   │   ├── system_metrics.py       # /api/system_metrics → persisted system health snapshots
+│   │   ├── utils/                  # Shared utilities for API layer
+│   │   │   └── cache_utils.py      # @cache_response decorator + hit/miss counters
 │   │   └── schemas/                # Pydantic request/response models
 │   │       ├── auth.py
 │   │       ├── site.py
@@ -102,56 +104,94 @@ Includes a static **demo dashboard** (`/site`) visualizing live API data.
 │   │       ├── energy.py
 │   │       └── __init__.py
 │   │
-│   ├── services/                   # Optional business logic layer
-│   │   ├── user_service.py         # Example service for user creation/validation
-│   │   └── meter_service.py        # Example service for meter logic
+│   ├── services/                   # Optional business-logic layer
+│   │   ├── user_service.py         # User creation/validation
+│   │   └── meter_service.py        # Meter logic helpers
 │   │
-│   ├── tasks/                      # Celery + async background tasks
+│   ├── tasks/                      # Celery background jobs
 │   │   ├── __init__.py
 │   │   ├── demo_data.py            # generate_demo_data / clean_demo_data
 │   │   ├── refresh_kpis.py         # compute daily KPIs into summary_kpi
 │   │   ├── cache_tasks.py          # clean_stale_cache / warmup_cache
 │   │   ├── metrics_tasks.py        # record_system_metrics / update_meta_cache
-│   │   ├── backup.py               # backup_db_snapshot (Postgres pg_dump or SQLite copy)
-│   │   ├── email.py                # send_health_email via SendGrid (optional)
-│   │   └── worker.py               # Celery + Beat scheduler configuration
+│   │   ├── backup.py               # backup_db_snapshot (pg_dump or SQLite copy)
+│   │   ├── email.py                # send_health_email via SendGrid
+│   │   └── worker.py               # Celery app + Beat scheduler
 │   │
-│   ├── telemetry/                  # Observability & monitoring stubs
+│   ├── telemetry/                  # Observability integration namespace
 │   │   └── __init__.py
 │   │
-│   └── graphql/                    # Placeholder for future GraphQL schema (Strawberry)
+│   └── graphql/                    # Placeholder for future GraphQL schema
 │       └── __init__.py
 │
 ├── site/                           # Static frontend demo
-│   ├── index.html                  # Dashboard summary
+│   ├── index.html                  # Dashboard overview
 │   ├── favicon.svg
 │   ├── pages/                      # Section pages
-│   │   ├── sites.html              # List of sites
-│   │   ├── meters.html             # Meter list per site
-│   │   ├── meter.html              # Meter detail charts
-│   │   └── tariffs.html            # Tariff summary
-│   ├── mock/                       # Offline fallback JSON
+│   │   ├── sites.html
+│   │   ├── meters.html
+│   │   ├── meter.html
+│   │   ├── tariffs.html
+│   │   └── system.html             # ✅ New system health dashboard
+│   ├── mock/
 │   │   └── meters.json
 │   ├── assets/
 │   │   ├── config.js               # API base URL + mock settings
-│   │   ├── css/style.css           # Styling (light/dark themes)
-│   │   ├── js/                     # Frontend logic
+│   │   ├── css/style.css           # Styling (responsive layout, centered title)
+│   │   ├── js/
 │   │   │   ├── api.js              # Fetch wrapper for API calls
 │   │   │   ├── charts.js           # Chart.js setup + helpers
 │   │   │   ├── theme.js            # Light/dark theme toggle
 │   │   │   ├── components/
 │   │   │   │   └── breadcrumb.js
-│   │   │   └── pages/              # Page-specific JS controllers
+│   │   │   └── pages/
 │   │   │       ├── dashboard.js
 │   │   │       ├── sites.js
 │   │   │       ├── meters.js
 │   │   │       ├── meter.js
-│   │   │       └── tariffs.js
-│   │   └── vendor/                 # Third-party libs
+│   │   │       ├── tariffs.js
+│   │   │       └── system.js       # ✅ Fetch + render system metrics charts
+│   │   └── vendor/
 │   │       ├── chart.min.js
 │   │       ├── chartjs-adapter-date-fns.min.js
 │   │       └── date-fns.min.js
 │
+├── scripts/                        # Management & automation scripts
+│   ├── prestart.sh                 # Wait for DB → init_db → start Uvicorn or Celery
+│   ├── init_db.py                  # Create tables + auto-add telemetry columns + optional seed
+│   ├── seed_demo.py                # Regenerates demo dataset
+│   ├── site-serve.sh               # Local static web server for /site
+│   └── site-open.sh                # Opens local site in browser
+│
+├── docker/
+│   └── Dockerfile                  # Multi-stage Poetry build
+│
+├── docker-compose.yml              # Local dev stack (Postgres + Redis + API)
+├── render.yaml                     # Render deploy definition (web + worker roles)
+│
+├── Makefile                        # CLI shortcuts for build/run/logs/smoke
+├── pyproject.toml / poetry.lock     # Dependencies & metadata
+├── mypy.ini / pytest.ini            # Type-check & testing config
+├── LICENSE                          # MIT license
+│
+├── docs/
+│   ├── db-diagram.drawio           # ERD visual of database schema
+│   └── db-diagram.xml
+│
+└── tests/                          # pytest suite
+    ├── conftest.py                 # Async fixtures + DB setup
+    ├── test_health.py              # Health endpoint test
+    ├── test_auth.py                # JWT auth tests
+    ├── test_meters.py              # Meter CRUD tests
+    ├── test_energy_endpoints.py    # Energy route coverage
+    ├── test_tariff.py              # Tariff endpoints
+    ├── test_cache.py               # Redis cache behavior
+    ├── test_metrics_endpoints.py   # ✅ Prometheus / metrics endpoint tests
+    ├── test_system_metrics_api.py  # ✅ System metrics API tests
+    ├── test_metrics_task.py        # ✅ Celery task for record_system_metrics
+    ├── test_tasks_integration.py   # Endpoint tests for /api/tasks/*
+    └── test_worker_tasks.py        # Direct Celery task execution
+
 ├── scripts/                        # Management & automation scripts
 │   ├── prestart.sh                 # Runs before Uvicorn: wait for DB, init, seed
 │   ├── init_db.py                  # Creates tables & seeds if SEED_DEMO=1
