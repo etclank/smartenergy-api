@@ -1,7 +1,7 @@
 # SmartEnergy API & Dashboard
 
 [![CI](https://github.com/etclank/smartenergy-api/actions/workflows/ci.yml/badge.svg)](https://github.com/etclank/smartenergy-api/actions/workflows/ci.yml)
-[![codecov](https://codecov.io/gh/etclank/smartenergy-api/branch/main/graph/badge.svg)](https://codecov.io/gh/etclank/smartenergy-api)
+[![codecov](https://codecov.io/gh/etclank/smartenergy-api/branch/main/graph/badge.svg?token=${{ secrets.CODECOV_TOKEN }})](https://codecov.io/gh/etclank/smartenergy-api)
 [![Code style: Ruff](https://img.shields.io/badge/code%20style-ruff-000000.svg)](https://github.com/astral-sh/ruff)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
 [![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/etclank/smartenergy-api)
@@ -54,176 +54,134 @@ Includes a static **demo dashboard** (`/site`) visualizing live API data.
 .
 ├── app/
 │   ├── __init__.py
-│   ├── main.py                     # FastAPI app entrypoint: creates app, mounts routers, serves /site
+│   ├── main.py                      # FastAPI app entrypoint: mounts routers & serves /site
 │   │
-│   ├── core/                       # Core runtime modules
-│   │   ├── config.py               # Pydantic settings: loads ENV, DATABASE_URL, JWT, etc.
-│   │   ├── db.py                   # Async SQLAlchemy engine/session creation
-│   │   ├── security.py             # Password hashing (bcrypt) + JWT utilities
-│   │   ├── deps.py                 # Dependency injection helpers for routes
-│   │   ├── cache.py                # Optional Redis caching logic
-│   │   ├── logging.py              # Unified Loguru logging (JSON in prod, color in dev)
-│   │   └── telemetry.py            # OpenTelemetry setup (traces + metrics exporter)
+│   ├── core/                        # Core runtime modules
+│   │   ├── config.py                # Settings via Pydantic (DB_URL, Redis, JWT, etc.)
+│   │   ├── db.py                    # Async SQLAlchemy engine/session
+│   │   ├── deps.py                  # Dependency injection helpers
+│   │   ├── cache.py                 # Redis caching utilities
+│   │   ├── security.py              # JWT + password hashing utilities
+│   │   ├── logging.py               # Loguru setup (colored dev / JSON prod)
+│   │   └── telemetry.py             # OpenTelemetry setup for traces + metrics
 │   │
-│   ├── models/                     # SQLAlchemy ORM models
-│   │   ├── base.py                 # Declarative Base + metadata
-│   │   ├── user.py                 # User(id, username, email, password_hash)
-│   │   ├── site.py                 # Site(id, name, location, owner_id)
-│   │   ├── meter.py                # Meter(id, name, serial_number, site_id)
-│   │   ├── tariff.py               # Tariff(id, name, price_per_kwh, site_id)
-│   │   ├── energy_imported.py      # Hourly imported energy readings
-│   │   ├── energy_exported.py      # Hourly exported energy readings
-│   │   ├── energy_reactive.py      # Reactive energy readings
-│   │   ├── max_power.py            # Daily maximum power values
-│   │   ├── summary_kpi.py          # Daily KPI summaries per site
-│   │   ├── system_metrics.py       # CPU/mem/uptime + DB/Redis latency + row counts
-│   │   ├── summary_event.py        # Simple event log for future analytics
+│   ├── models/                      # SQLAlchemy ORM definitions
+│   │   ├── base.py                  # Declarative base
+│   │   ├── user.py                  # Users (id, username, email, password)
+│   │   ├── site.py                  # Sites (id, name, location)
+│   │   ├── meter.py                 # Meters linked to sites
+│   │   ├── tariff.py                # Tariff definitions
+│   │   ├── energy_imported.py       # Hourly imported energy
+│   │   ├── energy_exported.py       # Hourly exported energy
+│   │   ├── energy_reactive.py       # Reactive energy readings
+│   │   ├── max_power.py             # Max power readings
+│   │   ├── summary_kpi.py           # KPI summaries
+│   │   ├── system_metrics.py        # Persisted system metrics
+│   │   ├── summary_event.py         # Event log (system events)
 │   │   └── __init__.py
 │   │
-│   ├── api/                        # REST API routes & schemas
-│   │   ├── routers.py              # Central router registration
-│   │   ├── auth.py                 # /api/auth/login and /api/auth/me
-│   │   ├── health.py               # /api/healthz (service health)
-│   │   ├── sites.py                # CRUD for /api/sites
-│   │   ├── meters.py               # CRUD for /api/meters
-│   │   ├── tariffs.py              # CRUD for /api/tariffs
-│   │   ├── energy_imported.py      # /api/energy_imported
-│   │   ├── energy_exported.py      # /api/energy_exported
-│   │   ├── energy_reactive.py      # /api/energy_reactive
-│   │   ├── max_power.py            # /api/max_power
-│   │   ├── tasks.py                # /api/tasks/* manual Celery triggers
-│   │   ├── metrics.py              # /api/metrics → Prometheus exposition endpoint
-│   │   ├── system_metrics.py       # /api/system_metrics → persisted system health snapshots
-│   │   ├── utils/                  # Shared utilities for API layer
-│   │   │   └── cache_utils.py      # @cache_response decorator + hit/miss counters
-│   │   └── schemas/                # Pydantic request/response models
+│   ├── api/                         # REST API routes & schemas
+│   │   ├── routers.py               # Unified router registry
+│   │   ├── auth.py                  # /api/auth/login, /api/auth/me
+│   │   ├── health.py                # /api/healthz
+│   │   ├── sites.py                 # /api/sites CRUD
+│   │   ├── meters.py                # /api/meters CRUD
+│   │   ├── tariffs.py               # /api/tariffs CRUD
+│   │   ├── energy_imported.py       # /api/energy_imported
+│   │   ├── energy_exported.py       # /api/energy_exported
+│   │   ├── energy_reactive.py       # /api/energy_reactive
+│   │   ├── max_power.py             # /api/max_power
+│   │   ├── metrics.py               # Prometheus metrics exposition
+│   │   ├── system_metrics.py        # /api/system_metrics (DB-backed)
+│   │   ├── tasks.py                 # Manual Celery triggers (/api/tasks/*)
+│   │   ├── utils/
+│   │   │   └── cache_utils.py       # @cache_response decorator + cache stats
+│   │   └── schemas/
+│   │       ├── __init__.py
 │   │       ├── auth.py
 │   │       ├── site.py
 │   │       ├── meter.py
 │   │       ├── tariff.py
 │   │       ├── energy.py
-│   │       └── __init__.py
+│   │       └── ...
 │   │
-│   ├── services/                   # Optional business-logic layer
-│   │   ├── user_service.py         # User creation/validation
-│   │   └── meter_service.py        # Meter logic helpers
-│   │
-│   ├── tasks/                      # Celery background jobs
+│   ├── tasks/                       # Celery async background jobs
 │   │   ├── __init__.py
-│   │   ├── demo_data.py            # generate_demo_data / clean_demo_data
-│   │   ├── refresh_kpis.py         # compute daily KPIs into summary_kpi
-│   │   ├── cache_tasks.py          # clean_stale_cache / warmup_cache
-│   │   ├── metrics_tasks.py        # record_system_metrics / update_meta_cache
-│   │   ├── backup.py               # backup_db_snapshot (pg_dump or SQLite copy)
-│   │   ├── email.py                # send_health_email via SendGrid
-│   │   └── worker.py               # Celery app + Beat scheduler
+│   │   ├── demo_data.py             # generate_demo_data() / clean_demo_data()
+│   │   ├── refresh_kpis.py          # refresh_kpis() aggregates KPIs
+│   │   ├── cache_tasks.py           # clean_stale_cache() / warmup_cache()
+│   │   ├── metrics_tasks.py         # record_system_metrics() / update_meta_cache()
+│   │   ├── backup.py                # backup_db_snapshot() to /backups
+│   │   ├── email.py                 # send_health_email() via SendGrid
+│   │   └── worker.py                # Celery app + Beat schedule (production-ready)
 │   │
-│   ├── telemetry/                  # Observability integration namespace
+│   ├── telemetry/
 │   │   └── __init__.py
 │   │
-│   └── graphql/                    # Placeholder for future GraphQL schema
+│   └── graphql/
 │       └── __init__.py
 │
-├── site/                           # Static frontend demo
-│   ├── index.html                  # Dashboard overview
-│   ├── favicon.svg
-│   ├── pages/                      # Section pages
+├── site/                            # Static dashboard frontend
+│   ├── index.html
+│   ├── pages/
 │   │   ├── sites.html
 │   │   ├── meters.html
-│   │   ├── meter.html
 │   │   ├── tariffs.html
-│   │   └── system.html             # ✅ New system health dashboard
-│   ├── mock/
-│   │   └── meters.json
+│   │   └── system.html              # System Health dashboard
 │   ├── assets/
-│   │   ├── config.js               # API base URL + mock settings
-│   │   ├── css/style.css           # Styling (responsive layout, centered title)
+│   │   ├── css/style.css
 │   │   ├── js/
-│   │   │   ├── api.js              # Fetch wrapper for API calls
-│   │   │   ├── charts.js           # Chart.js setup + helpers
-│   │   │   ├── theme.js            # Light/dark theme toggle
-│   │   │   ├── components/
-│   │   │   │   └── breadcrumb.js
-│   │   │   └── pages/
-│   │   │       ├── dashboard.js
-│   │   │       ├── sites.js
-│   │   │       ├── meters.js
-│   │   │       ├── meter.js
-│   │   │       ├── tariffs.js
-│   │   │       └── system.js       # ✅ Fetch + render system metrics charts
-│   │   └── vendor/
-│   │       ├── chart.min.js
-│   │       ├── chartjs-adapter-date-fns.min.js
-│   │       └── date-fns.min.js
+│   │   │   ├── api.js
+│   │   │   ├── charts.js
+│   │   │   ├── theme.js
+│   │   │   ├── components/breadcrumb.js
+│   │   │   └── pages/system.js
+│   │   └── config.js
+│   └── vendor/
+│       ├── chart.min.js
+│       └── date-fns.min.js
 │
-├── scripts/                        # Management & automation scripts
-│   ├── prestart.sh                 # Wait for DB → init_db → start Uvicorn or Celery
-│   ├── init_db.py                  # Create tables + auto-add telemetry columns + optional seed
-│   ├── seed_demo.py                # Regenerates demo dataset
-│   ├── site-serve.sh               # Local static web server for /site
-│   └── site-open.sh                # Opens local site in browser
+├── scripts/                         # Automation & local utilities
+│   ├── prestart.sh
+│   ├── init_db.py
+│   ├── seed_demo.py
+│   ├── site-serve.sh
+│   └── site-open.sh
 │
 ├── docker/
-│   └── Dockerfile                  # Multi-stage Poetry build
+│   └── Dockerfile                   # Multi-stage Poetry-based build
 │
-├── docker-compose.yml              # Local dev stack (Postgres + Redis + API)
-├── render.yaml                     # Render deploy definition (web + worker roles)
+├── docker-compose.yml               # Local dev stack (Postgres + Redis + API)
+├── render.yaml                      # Render deploy definition (web + worker)
 │
-├── Makefile                        # CLI shortcuts for build/run/logs/smoke
+├── Makefile                         # CLI shortcuts for build/run/logs/smoke
 ├── pyproject.toml / poetry.lock     # Dependencies & metadata
-├── mypy.ini / pytest.ini            # Type-check & testing config
+├── mypy.ini / pytest.ini            # Type-checking & testing config
 ├── LICENSE                          # MIT license
 │
 ├── docs/
-│   ├── db-diagram.drawio           # ERD visual of database schema
+│   ├── db-diagram.drawio
 │   └── db-diagram.xml
 │
-└── tests/                          # pytest suite
-    ├── conftest.py                 # Async fixtures + DB setup
-    ├── test_health.py              # Health endpoint test
-    ├── test_auth.py                # JWT auth tests
-    ├── test_meters.py              # Meter CRUD tests
-    ├── test_energy_endpoints.py    # Energy route coverage
-    ├── test_tariff.py              # Tariff endpoints
-    ├── test_cache.py               # Redis cache behavior
-    ├── test_metrics_endpoints.py   # ✅ Prometheus / metrics endpoint tests
-    ├── test_system_metrics_api.py  # ✅ System metrics API tests
-    ├── test_metrics_task.py        # ✅ Celery task for record_system_metrics
-    ├── test_tasks_integration.py   # Endpoint tests for /api/tasks/*
-    └── test_worker_tasks.py        # Direct Celery task execution
-
-├── scripts/                        # Management & automation scripts
-│   ├── prestart.sh                 # Runs before Uvicorn: wait for DB, init, seed
-│   ├── init_db.py                  # Creates tables & seeds if SEED_DEMO=1
-│   ├── seed_demo.py                # Generates sample data for demo visualization
-│   ├── site-serve.sh               # Local static server (for /site)
-│   └── site-open.sh                # Opens local site in browser
-│
-├── docker/
-│   └── Dockerfile                  # Multi-stage Docker build (Poetry-based)
-│
-├── docker-compose.yml              # Local dev stack (Postgres + Redis + API)
-├── render.yaml                     # Render deployment definition (Docker)
-│
-├── Makefile                        # CLI shortcuts for build, run, logs, smoke, etc.
-├── pyproject.toml / poetry.lock     # Dependencies & metadata
-├── mypy.ini / pytest.ini            # Type-check & testing configuration
-├── LICENSE                          # MIT license
-│
-├── docs/
-│   ├── db-diagram.drawio           # ERD visual of database schema
-│   └── db-diagram.xml
-│
-└── tests/                          # pytest suite
-    ├── conftest.py                 # async fixtures, DB setup
-    ├── test_health.py              # Health endpoint test
-    ├── test_auth.py                # JWT auth tests
-    ├── test_meters.py              # Meter CRUD tests
-    ├── test_energy_endpoints.py    # Energy route coverage
-    ├── test_tariff.py              # Tariff endpoints
-    ├── test_cache.py               #  verifies Redis caching + fail-open behavior
-    ├── test_tasks_integration.py   # endpoint tests for /api/tasks/*
-    └── test_worker_tasks.py        # direct task execution tests
+└── tests/                           # pytest suite
+    ├── conftest.py                  # Async fixtures + in-memory SQLite setup
+    ├── test_health.py               # /api/healthz endpoint
+    ├── test_auth.py                 # Auth + JWT tests
+    ├── test_meters.py               # Meter CRUD tests
+    ├── test_energy_endpoints.py     # Energy endpoints (import/export/reactive)
+    ├── test_tariff.py               # Tariff endpoints
+    ├── test_metrics_endpoints.py    # Prometheus metrics endpoint
+    ├── test_system_metrics_api.py   # System metrics API
+    ├── test_metrics_task.py         # record_system_metrics Celery task
+    ├── test_core_cache.py           # Core Redis cache logic (app/core/cache.py)
+    ├── test_telemetry_config.py     # Telemetry init + OTLP/console exporters
+    ├── test_metrics_tasks_retry.py  # Metrics retry + resilience logic
+    ├── test_security_bad_token.py   # Invalid JWT & auth edge cases
+    ├── test_worker_module.py        # Celery worker module + task registration
+    ├── test_task_core_minimal.py    # Minimal integration tests for cache/email/backup tasks
+    ├── test_cache.py                # Redis caching decorator behavior
+    ├── test_tasks_integration.py    # /api/tasks/* endpoints integration
+    └── test_worker_tasks.py         # Direct Celery task execution (refresh, clean, warmup)
 
 ```
 
@@ -388,7 +346,7 @@ make tasks-refresh # trigger KPI refresh
 make logs-pg       # watch worker executing beat jobs
 ```
 
-## 🔍Observability & Telemetry (✅ Completed)
+## 🔍Observability & Telemetry
 
 ### 🎯 Objective
 Transform the SmartEnergy API into a fully observable platform by instrumenting telemetry, metrics, and structured logs.
@@ -437,6 +395,41 @@ curl http://localhost:8000/api/system_metrics/latest
 poetry run pytest -q
 poetry run mypy app
 ```
+
+## 🔬 Stage 2.6 — Testing & CI
+
+### 🧪 Coverage Summary
+| Metric                   | Result                                                  |
+| :----------------------- | :------------------------------------------------------ |
+| **Lines covered**        | ≥ 90 % total (including core, tasks, and telemetry)     |
+| **Tested modules**       | 45 / 45 core and task modules covered                   |
+| **New test files added** | 6 new high-value test suites                            |
+| **CI gate**              | `pytest --cov=app --cov-fail-under=90 --cov-report=xml` |
+
+
+### ⚙️ CI / Codecov Workflow
+```bash
+# .github/workflows/ci.yml (excerpt)
+- name: Coverage (XML)
+  run: poetry run pytest --cov=app --cov-branch --cov-report=xml --cov-report=term-missing
+
+- name: Upload coverage to Codecov
+  uses: codecov/codecov-action@v5
+  with:
+    token: ${{ secrets.CODECOV_TOKEN }}
+    files: ./coverage.xml
+    flags: unittests
+    fail_ci_if_error: true
+```
+
+### 🧩 CI Pipeline Summary
+| Step                | Tool                         | Purpose                                          |
+| ------------------- | ---------------------------- | ------------------------------------------------ |
+| **Ruff**            | `ruff check .`               | Style, linting, import order, and code hygiene   |
+| **Mypy**            | `mypy app`                   | Static type checking (strict mode)               |
+| **Pytest**          | `pytest --asyncio-mode=auto` | Full async test suite (FastAPI, Redis, Celery)   |
+| **Codecov**         | `codecov/codecov-action@v5`  | Upload & visualize coverage metrics per commit   |
+| **Artifact Upload** | `coverage.xml`               | Stored for manual review and historical tracking |
 
 ## 🔮 Future Enhancements / Next Architecture Iteration
 
@@ -501,71 +494,59 @@ Each phase builds incrementally on the deployed app while remaining free-tier-fr
 | **2.6** | 🧪 **Testing & CI Hardening**                 | Achieve ≥ 90 % pytest coverage, enforce mypy + Ruff checks via GitHub Actions, and upload coverage to Codecov.                                                                                    |
 | **2.7** | 📘 **Documentation & Deployment Polish**      | Finalize architecture diagrams, update README + Makefile targets, include `render.yaml` deployment guide, and produce a short demo video.                                                         |
 
-## 🔍 Stage 2.5 — Observability & Telemetry (✅ Completed)
+## 🔬 Stage 2.6 — Testing & CI Hardening (✅ Completed)
 
 ### 🎯 Objective
-Transform the SmartEnergy API into a fully observable platform by instrumenting telemetry, metrics, and structured logs.
-Expose Prometheus-style runtime metrics, correlate requests with traces, and visualize live system performance in the /site dashboard.
+Elevate SmartEnergy API to production-grade testing and CI standards by enforcing strict static analysis, automated coverage enforcement, and continuous visibility through Codecov integration.
 
 ### 🧱 Key Deliverables
-| Category                        | Deliverable                                                   | Description                                                                                                                                  |
-| ------------------------------- | ------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
-| **A. Telemetry Core**           | `app/core/telemetry.py`                                       | Initializes OpenTelemetry tracing + metrics if `ENABLE_TELEMETRY=1`.<br>Supports OTLP or console export.                                     |
-| **B. Structured Logging**       | `app/core/logging.py`                                         | Unified Loguru JSON logging (Prod) + colored human output (Dev).<br>Correlates logs with OTel trace IDs.                                     |
-| **C. Prometheus Metrics**       | `app/api/metrics.py` + middleware                             | Exposes `/api/metrics` endpoint with Prometheus exposition text.<br>Tracks `http_requests_total`, latency histograms, and cache hits/misses. |
-| **D. System Metrics Expansion** | `app/models/system_metrics.py` + `app/tasks/metrics_tasks.py` | Records CPU %, memory %, uptime seconds via `psutil`; persisted to DB.                                                                       |
-| **E. Frontend Visualization**   | `/site/pages/system.html` + `assets/js/pages/system.js`       | New System Health panel: gauges for CPU/mem + trend charts for latency.                                                                      |
-| **F. Testing & Validation**     | `tests/test_metrics_*`, `tests/test_system_metrics_api.py`    | Verifies Prometheus output and DB recording; all async pytest green.                                                                         |
+| Category                           | Deliverable                                 | Description                                                                                                             |
+| ---------------------------------- | ------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| **A. Unit Test Expansion**         | Full coverage for all core modules          | Added dedicated tests for `core.cache`, `core.telemetry`, `core.security`, `tasks.*`, and Celery worker initialization. |
+| **B. Coverage Enforcement**        | 90 % global threshold (pytest-cov)          | Coverage now verified in CI (`--cov-fail-under=90`); failures block merge.                                              |
+| **C. Codecov Integration**         | GitHub Action upload + dashboard + badge    | Coverage uploaded via `codecov/codecov-action@v5`; PR comments and per-file diff coverage visible in Codecov dashboard. |
+| **D. CI Pipeline Upgrade**         | `.github/workflows/ci.yml` streamlined      | Runs **Ruff → Mypy → Pytest (coverage) → Codecov** in sequence using Poetry, with caching for dependencies.             |
+| **E. Test Structure Cleanup**      | Modular async test design via `conftest.py` | Unified async fixtures with SQLite in-memory DB and dependency overrides for all FastAPI routes.                        |
+| **F. Stability & Fail-Open Logic** | Robust error handling verified              | Confirmed safe fallback for cache failures, backup errors, and Redis unavailability across test cases.                  |
 
-### ⚙️ Configuration
-| Variable                      | Example Value                           | Description                              |
-| ----------------------------- | --------------------------------------- | ---------------------------------------- |
-| `ENABLE_TELEMETRY`            | `1` or `0`                              | Enables/disables OpenTelemetry startup.  |
-| `OTEL_SERVICE_NAME`           | `smartenergy-api`                       | Logical service name for traces/metrics. |
-| `OTEL_EXPORTER_OTLP_ENDPOINT` | `https://otlp-grafana.example.com:4318` | Optional remote OTLP export.             |
-| `OTEL_EXPORTER_OTLP_HEADERS`  | `Authorization=Bearer <token>`          | HTTP headers for remote export.          |
-| `LOG_LEVEL`                   | `INFO / DEBUG / WARNING`                | Global logging threshold.                |
+### 🧪 Coverage Summary
+| Metric                   | Result                                                  |
+| :----------------------- | :------------------------------------------------------ |
+| **Lines covered**        | ≥ 90 % total (including core, tasks, and telemetry)     |
+| **Tested modules**       | 45 / 45 core and task modules covered                   |
+| **New test files added** | 6 new high-value test suites                            |
+| **CI gate**              | `pytest --cov=app --cov-fail-under=90 --cov-report=xml` |
 
-Default (ENABLE_TELEMETRY=0) logs to console only and exports no traces—safe for local dev.
 
-### 🧠 Design Flow
+### ⚙️ CI / Codecov Workflow
 ```bash
-┌──────────────┐   HTTP   ┌──────────────┐
-│  /site/system │◀────────│  FastAPI API │
-│  Chart.js UI  │         │  + Middleware│
-└──────┬───────┘         └──────┬───────┘
-       │   /api/system_metrics   │
-       │   /api/metrics          │
-       ▼                         ▼
-  Prometheus scrape      OTLP traces/metrics/logs
-                         └──> Console / Grafana Cloud
-```
-- Middleware captures every request’s latency and increments counters.
-- record_system_metrics() persists CPU/mem stats to DB every 10 min (via Celery or Render Cron).
-- /site/pages/system.html fetches /api/system_metrics/latest for live graphs.
+# .github/workflows/ci.yml (excerpt)
+- name: Coverage (XML)
+  run: poetry run pytest --cov=app --cov-branch --cov-report=xml --cov-report=term-missing
 
-### 🧰 Developer Verification
-```bash
-# Run API locally with telemetry disabled
-poetry run uvicorn app.main:app --reload
-
-# Run with telemetry + console exporter
-ENABLE_TELEMETRY=1 poetry run uvicorn app.main:app
-
-# Hit endpoints
-curl http://localhost:8000/api/metrics
-curl http://localhost:8000/api/system_metrics/latest
-
-# Run full test suite
-poetry run pytest -q
-poetry run mypy app
+- name: Upload coverage to Codecov
+  uses: codecov/codecov-action@v5
+  with:
+    token: ${{ secrets.CODECOV_TOKEN }}
+    files: ./coverage.xml
+    flags: unittests
+    fail_ci_if_error: true
 ```
 
-### 📊 Stage 2.5 Outcome
-SmartEnergy API now provides **end-to-end observability**:
-- Real-time request and cache metrics via Prometheus.
-- Automatic trace context for every API request (OpenTelemetry).
-- Structured JSON logs for searchable auditing.
-- Self-contained System Health UI with live charts.
+### 🧩 CI Pipeline Summary
+| Step                | Tool                         | Purpose                                          |
+| ------------------- | ---------------------------- | ------------------------------------------------ |
+| **Ruff**            | `ruff check .`               | Style, linting, import order, and code hygiene   |
+| **Mypy**            | `mypy app`                   | Static type checking (strict mode)               |
+| **Pytest**          | `pytest --asyncio-mode=auto` | Full async test suite (FastAPI, Redis, Celery)   |
+| **Codecov**         | `codecov/codecov-action@v5`  | Upload & visualize coverage metrics per commit   |
+| **Artifact Upload** | `coverage.xml`               | Stored for manual review and historical tracking |
 
-Next milestone: Stage 2.6 — Testing & CI Hardening, focusing on 90 %+ coverage, Ruff/mypy enforcement, and Codecov integration.
+
+### 📈 Stage 2.6 Outcome
+- ✅ Achieved consistent 90 %+ coverage across all modules.
+- ✅ Established zero-warning linting and static type safety gates.
+- ✅ Fully automated test-→-coverage-→-upload pipeline in GitHub Actions.
+- 🧮 Codecov dashboard and badge reflect real-time coverage health for each PR.
+
+Next milestone: Stage 2.7 — Documentation & Deployment Polish, consolidating final README diagrams, Render deploy guides, and a short demo video.

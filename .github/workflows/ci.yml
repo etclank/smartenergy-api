@@ -56,13 +56,21 @@ jobs:
         env:
           DATABASE_URL: 'sqlite+aiosqlite:///:memory:'
           JWT_SECRET: test-secret
-        run: poetry run pytest --cov=app --cov-report=xml --cov-report=term-missing
+        run: poetry run pytest --cov=app --cov-branch --cov-report=xml --cov-report=term-missing
 
       - name: Upload coverage.xml
         uses: actions/upload-artifact@v4
         with:
           name: coverage-xml
           path: coverage.xml
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: ./coverage.xml
+          flags: unittests
+          fail_ci_if_error: true
 
       - name: Mypy
         run: poetry run mypy --config-file mypy.ini app

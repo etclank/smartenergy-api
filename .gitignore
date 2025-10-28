@@ -1,5 +1,6 @@
 # OS
 .DS_Store
+app/.DS_Store
 
 # Python
 __pycache__/

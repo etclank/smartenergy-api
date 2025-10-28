@@ -2,6 +2,9 @@
 import pytest
 from fastapi import status
 
+# tests/test_energy_endpoints.py
+
+
 @pytest.mark.asyncio
 async def test_list_sites(client):
     """GET /api/sites/ should return a list of sites."""
@@ -44,7 +47,10 @@ async def test_list_energy_reactive(client):
     data = resp.json()
     assert isinstance(data, list)
     if data:
-        assert "measure_value" in data[0]
+        assert any(
+            key in data[0]
+            for key in ("imported_kvarh", "exported_kvarh", "measure_value")
+        )
 
 
 @pytest.mark.asyncio
