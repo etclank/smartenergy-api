@@ -33,6 +33,8 @@ async def test_get_redis_success(monkeypatch):
     """Redis connects successfully and returns a client."""
     from app.core import cache
 
+    monkeypatch.setattr(cache.settings, "redis_url", "redis://test")
+
     cache._client = None  # reset global singleton
     monkeypatch.setattr(
         cache,
@@ -50,6 +52,8 @@ async def test_get_redis_success(monkeypatch):
 async def test_get_redis_failure(monkeypatch, capsys):
     """If Redis ping fails, get_redis() returns None gracefully."""
     from app.core import cache
+
+    monkeypatch.setattr(cache.settings, "redis_url", "redis://test")
 
     class FailingRedis(DummyRedis):
         async def ping(self):
@@ -74,9 +78,14 @@ async def test_cache_set_and_get(monkeypatch):
     """Verify cache_set() and cache_get() serialize and deserialize correctly."""
     from app.core import cache
 
+    monkeypatch.setattr(cache.settings, "redis_url", "redis://test")
+
     dummy = DummyRedis()
     cache._client = dummy
-    async def _get_redis(): return dummy
+
+    async def _get_redis():
+        return dummy
+
     monkeypatch.setattr(cache, "get_redis", _get_redis)
 
     payload = {"a": 1}
@@ -91,6 +100,8 @@ async def test_cache_set_and_get(monkeypatch):
 async def test_cache_set_fail_open(monkeypatch):
     """If Redis operations raise, cache_set() fails open (no exception)."""
     from app.core import cache
+
+    monkeypatch.setattr(cache.settings, "redis_url", "redis://test")
 
     class BadRedis(DummyRedis):
         async def setex(self, *a, **k):
@@ -114,9 +125,14 @@ async def test_ping_redis_true(monkeypatch):
     """ping_redis() returns True if Redis reachable."""
     from app.core import cache
 
+    monkeypatch.setattr(cache.settings, "redis_url", "redis://test")
+
     dummy = DummyRedis()
     cache._client = dummy
-    async def _get_redis(): return dummy
+
+    async def _get_redis():
+        return dummy
+
     monkeypatch.setattr(cache, "get_redis", _get_redis)
 
     result = await cache.ping_redis()
@@ -127,6 +143,8 @@ async def test_ping_redis_true(monkeypatch):
 async def test_ping_redis_false(monkeypatch):
     """ping_redis() returns False if Redis unavailable."""
     from app.core import cache
+
+    monkeypatch.setattr(cache.settings, "redis_url", "redis://test")
 
     cache._client = None
 

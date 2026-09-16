@@ -7,19 +7,23 @@ from app.tasks import metrics_tasks as mt
 @pytest.mark.asyncio
 async def test_record_system_metrics_success(monkeypatch):
     """Happy path: DB + Redis work and psutil returns valid stats."""
+
     # Dummy engine with async context
     class DummyConn:
         async def execute(self, *a, **k):
             return None
 
     class DummyEngine:
-        async def begin(self):
+        def begin(self):
             return self
 
         async def __aenter__(self):
             return DummyConn()
 
         async def __aexit__(self, *a):
+            pass
+
+        async def dispose(self):
             pass
 
     async def _get_engine():
@@ -58,10 +62,18 @@ async def test_record_system_metrics_success(monkeypatch):
 @pytest.mark.asyncio
 async def test_record_system_metrics_handles_exceptions(monkeypatch):
     """Ensure record_system_metrics() tolerates raised exceptions gracefully."""
+
     async def raise_runtime(*a, **k):
         raise RuntimeError("fail")
 
-    monkeypatch.setattr(mt, "get_async_engine", raise_runtime)
+    class BrokenEngine:
+        def begin(self):
+            raise RuntimeError("fail")
+
+        async def dispose(self):
+            pass
+
+    monkeypatch.setattr(mt, "get_async_engine", BrokenEngine)
     monkeypatch.setattr(mt, "get_redis", raise_runtime)
     monkeypatch.setattr(
         mt.psutil,
@@ -97,6 +109,7 @@ async def test_update_meta_cache_ok(monkeypatch):
 @pytest.mark.asyncio
 async def test_update_meta_cache_fail(monkeypatch):
     """Handles Redis unavailable and set() failure."""
+
     async def _none():
         return None
 

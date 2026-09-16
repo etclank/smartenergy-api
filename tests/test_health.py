@@ -2,6 +2,7 @@
 import pytest
 from fastapi import status
 
+
 @pytest.mark.asyncio
 async def test_healthz(client):
     """Check /api/health/z returns 200 and basic structure."""

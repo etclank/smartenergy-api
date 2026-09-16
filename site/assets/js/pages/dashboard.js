@@ -2,11 +2,11 @@
 window.addEventListener("DOMContentLoaded", async () => {
   // 1️⃣ Initialize health badges
   try {
-    await Promise.all([API.healthz(), API.cachez()]);
+    const [, cache] = await Promise.all([API.healthz(), API.cachez()]);
     document.getElementById("health").textContent = "API: up";
     document.getElementById("health").className = "badge badge-live";
-    document.getElementById("cache").textContent = "Redis: up";
-    document.getElementById("cache").className = "badge badge-live";
+    document.getElementById("cache").textContent = `Redis: ${cache.redis}`;
+    document.getElementById("cache").className = cache.redis === "up" ? "badge badge-live" : "badge badge-mock";
   } catch {
     document.getElementById("health").textContent = "API error";
     document.getElementById("health").className = "badge badge-error";

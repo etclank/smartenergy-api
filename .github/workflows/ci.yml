@@ -1,76 +1,43 @@
 name: CI
-
 on:
   push:
     branches: [main]
   pull_request:
     branches: [main]
-
+permissions:
+  contents: read
 jobs:
   ci:
     runs-on: ubuntu-latest
-
+    env:
+      DATABASE_URL: sqlite+aiosqlite:///./test.db
+      JWT_SECRET: test-secret
+      ENABLE_TELEMETRY: "0"
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.13"
-
       - name: Install Poetry
-        uses: abatilo/actions-poetry@v2
-        with:
-          poetry-version: "2.2.1"
-
-      - name: Configure Poetry (no venv)
-        run: poetry config virtualenvs.create false
-
-      - name: Cache dependencies
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cache/pypoetry
-            ~/.cache/pip
-          key: ${{ runner.os }}-poetry-${{ hashFiles('**/poetry.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-poetry-
-
-      - name: Install dependencies
+        run: pip install poetry==2.2.1
+      - name: Install locked dependencies
         run: poetry install --no-interaction --no-ansi
-
-      - name: Ruff
+      - name: Lint
         run: poetry run ruff check .
-
-      - name: Mypy
-        run: poetry run mypy app
-
-      - name: Pytest (SQLite in-memory)
-        env:
-          DATABASE_URL: 'sqlite+aiosqlite:///:memory:'
-          JWT_SECRET: test-secret
-        run: poetry run pytest --maxfail=1 --disable-warnings -q
-
-      - name: Coverage (XML)
-        env:
-          DATABASE_URL: 'sqlite+aiosqlite:///:memory:'
-          JWT_SECRET: test-secret
+      - name: Format
+        run: poetry run ruff format --check .
+      - name: Type check
+        run: poetry run mypy --config-file mypy.ini app
+      - name: Tests and coverage
         run: poetry run pytest --cov=app --cov-branch --cov-report=xml --cov-report=term-missing
-
-      - name: Upload coverage.xml
-        uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v4
         with:
           name: coverage-xml
           path: coverage.xml
-
-      - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v5
+      - uses: actions/setup-node@v4
         with:
-          token: ${{ secrets.CODECOV_TOKEN }}
-          files: ./coverage.xml
-          flags: unittests
-          fail_ci_if_error: true
-
-      - name: Mypy
-        run: poetry run mypy --config-file mypy.ini app
+          node-version: "22"
+      - name: Dashboard smoke
+        run: node tests/dashboard_smoke.cjs
+      - name: Build image
+        run: docker build -f docker/Dockerfile -t smartenergy-api:ci .

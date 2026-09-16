@@ -8,7 +8,7 @@ import math
 
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
-from sqlalchemy import text
+from sqlalchemy import select
 from app.core.config import settings
 from app.models import (
     User,
@@ -30,34 +30,30 @@ pwd_context = CryptContext(
 
 
 async def seed() -> None:
-    """Completely reset and reseed demo data on each deploy."""
+    """Seed an empty database; never overwrite existing users or data."""
+    if not settings.demo_password or settings.demo_password in {"demo", "change-me"}:
+        raise ValueError("Set DEMO_PASSWORD to a unique password before seeding")
     engine = create_async_engine(settings.database_url, pool_pre_ping=True)
-    async_session = sessionmaker(bind=engine, class_=AsyncSession, expire_on_commit=False)
+    async_session = sessionmaker(
+        bind=engine, class_=AsyncSession, expire_on_commit=False
+    )
 
     print("[seed_demo] 🚀 Starting fresh demo database seed.")
-    print(f"[seed_demo] Using database: {settings.database_url}")
 
     try:
         async with async_session() as session:
-            # --- Drop all existing data ---
-            print("[seed_demo] 💥 Wiping all existing data...")
-            await session.execute(text("DELETE FROM energy_imported"))
-            await session.execute(text("DELETE FROM energy_exported"))
-            await session.execute(text("DELETE FROM energy_reactive"))
-            await session.execute(text("DELETE FROM max_power"))
-            await session.execute(text("DELETE FROM meters"))
-            await session.execute(text("DELETE FROM tariffs"))
-            await session.execute(text("DELETE FROM sites"))
-            await session.execute(text("DELETE FROM users"))
-            await session.commit()
-            print("[seed_demo] ✅ Database wiped clean.")
+            if await session.scalar(select(User.id).limit(1)) is not None:
+                print("[seed_demo] Existing users found; leaving data unchanged.")
+                return
 
             # --- Create demo user ---
-            hashed_pw = pwd_context.hash("demo")
-            user = User(username="demo", email="demo@example.com", hashed_password=hashed_pw)
+            hashed_pw = pwd_context.hash(settings.demo_password)
+            user = User(
+                username="demo", email="demo@example.com", hashed_password=hashed_pw
+            )
             session.add(user)
             await session.flush()
-            print("[seed_demo] 👤 Created demo user (username: demo, password: demo)")
+            print("[seed_demo] Created demo user")
 
             # --- Sites ---
             site_names = ["Main Campus", "Research Lab"]
@@ -104,28 +100,46 @@ async def seed() -> None:
                     for h in range(24 * 7):
                         ts = now - timedelta(hours=h)
                         base = 1.5 + 1.0 * (1 + math.sin(h / 12.0)) / 2
-                        hourly_records.extend([
-                            EnergyImported(timestamp=ts, measure_value=base + random.uniform(-0.3, 0.3), meter=meter),
-                            EnergyExported(timestamp=ts, measure_value=max(0, base / 2 + random.uniform(-0.2, 0.2)), meter=meter),
-                            EnergyReactive(
-                                timestamp=ts,
-                                imported_kvarh=0.2 + random.uniform(0.0, 0.2),
-                                exported_kvarh=0.2 + random.uniform(0.0, 0.2),
-                                meter=meter,
-                            ),
-                        ])
+                        hourly_records.extend(
+                            [
+                                EnergyImported(
+                                    timestamp=ts,
+                                    measure_value=base + random.uniform(-0.3, 0.3),
+                                    meter=meter,
+                                ),
+                                EnergyExported(
+                                    timestamp=ts,
+                                    measure_value=max(
+                                        0, base / 2 + random.uniform(-0.2, 0.2)
+                                    ),
+                                    meter=meter,
+                                ),
+                                EnergyReactive(
+                                    timestamp=ts,
+                                    imported_kvarh=0.2 + random.uniform(0.0, 0.2),
+                                    exported_kvarh=0.2 + random.uniform(0.0, 0.2),
+                                    meter=meter,
+                                ),
+                            ]
+                        )
                     session.add_all(hourly_records)
 
                     # Daily max power data (7 days)
                     power_records = [
-                        MaxPower(timestamp=(now - timedelta(days=d)).date(), measure_value=random.uniform(3.0, 5.5), meter=meter)
+                        MaxPower(
+                            timestamp=(now - timedelta(days=d)),
+                            measure_value=random.uniform(3.0, 5.5),
+                            meter=meter,
+                        )
                         for d in range(7)
                     ]
                     session.add_all(power_records)
 
             await session.commit()
             print("[seed_demo] ✅ Demo data seeded successfully.")
-            print(f"[seed_demo] Summary → Users: 1 | Sites: {len(sites)} | Meters: {len(sites)*3} | Tariffs: {len(sites)*2}")
+            print(
+                f"[seed_demo] Summary → Users: 1 | Sites: {len(sites)} | Meters: {len(sites)*3} | Tariffs: {len(sites)*2}"
+            )
 
     finally:
         await engine.dispose()

@@ -12,8 +12,10 @@ from app.models import User
 @pytest.mark.asyncio
 async def test_get_current_user_invalid_token(monkeypatch):
     """Invalid token → raises 401."""
+
     async def dummy_get_db():
         yield None
+
     token = "invalid.token"
     with pytest.raises(HTTPException) as exc:
         await deps.get_current_user(token=token, db=None)
@@ -24,7 +26,9 @@ async def test_get_current_user_invalid_token(monkeypatch):
 async def test_get_current_user_missing_user(monkeypatch, db_session):
     """Valid token but user not found → raises 404."""
     payload = {"sub": "ghost"}
-    token = jwt.encode(payload, deps.settings.jwt_secret, algorithm=deps.settings.jwt_algorithm)
+    token = jwt.encode(
+        payload, deps.settings.jwt_secret, algorithm=deps.settings.jwt_algorithm
+    )
     with pytest.raises(HTTPException) as exc:
         await deps.get_current_user(token=token, db=db_session)
     assert exc.value.status_code == status.HTTP_404_NOT_FOUND

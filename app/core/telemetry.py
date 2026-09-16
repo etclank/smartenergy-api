@@ -48,7 +48,11 @@ def init_telemetry(app: FastAPI) -> None:
     if otlp_endpoint:
         exporter = OTLPSpanExporter(
             endpoint=otlp_endpoint,
-            headers=(dict([h.split("=", 1) for h in otlp_headers.split(",")]) if otlp_headers else None),
+            headers=(
+                dict([h.split("=", 1) for h in otlp_headers.split(",")])
+                if otlp_headers
+                else None
+            ),
         )
         logging.info(f"[telemetry] OTLP trace exporter → {otlp_endpoint}")
     else:
@@ -75,6 +79,7 @@ def init_telemetry(app: FastAPI) -> None:
     # SQLAlchemy is instrumented where engine is created (see db.py) – safe no-op if repeated
     try:
         from app.core.db import engine
+
         SQLAlchemyInstrumentor().instrument(engine=engine.sync_engine)
     except Exception as exc:
         logging.warning(f"[telemetry] SQLAlchemy instrumentation skipped: {exc}")

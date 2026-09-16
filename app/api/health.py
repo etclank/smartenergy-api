@@ -4,9 +4,10 @@ from app.core.cache import get_redis
 
 router = APIRouter(prefix="/health", tags=["health"])
 
+
 @router.get("/z", status_code=status.HTTP_200_OK)
 async def healthz() -> dict[str, str]:
-    """Global health endpoint (used by Render + frontend badges)."""
+    """Process/cache health endpoint used by containers and the dashboard."""
     redis_status = "down"
     try:
         client = await get_redis()

@@ -8,7 +8,7 @@ window.addEventListener("DOMContentLoaded", async () => {
     { label: "Home", href: "/site/" },
     { label: "Sites", href: "/site/pages/sites.html" }
   ];
-  if (siteId) trail.push({ label: `Site ${siteId}`, href: `/site/pages/meters.html?site_id=${siteId}` });
+  if (siteId) trail.push({ label: `Site ${encodeURIComponent(siteId)}`, href: `/site/pages/meters.html?site_id=${encodeURIComponent(siteId)}` });
   trail.push({ label: "Meters", href: "/site/pages/meters.html" });
   renderBreadcrumb(document.getElementById("breadcrumb"), trail);
 
@@ -18,7 +18,7 @@ window.addEventListener("DOMContentLoaded", async () => {
     list.innerHTML = "";
     meters.forEach((m) => {
       const li = document.createElement("li");
-      li.innerHTML = `<a href="/site/pages/meter.html?id=${m.id}">${m.name}</a> — ${m.location || ""}`;
+      li.innerHTML = `<a href="/site/pages/meter.html?id=${m.id}">${API.escapeHTML(m.name)}</a> — ${API.escapeHTML(m.location || "")}`;
       list.appendChild(li);
     });
   } catch (e) {

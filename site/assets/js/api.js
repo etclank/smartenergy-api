@@ -36,7 +36,10 @@
     return ct.includes("application/json") ? res.json() : res.text();
   }
 
+  const escapeHTML = (value) => String(value ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
   const api = {
+    escapeHTML,
     getBase, setBase, getToken, setToken, req, forceMock: FORCE_MOCK,
 
     healthz: () => req("health/z"),
@@ -51,7 +54,7 @@
         try { return await req("meters/"); }
         catch (e) { console.warn("metersList live failed, using mock:", e); }
       }
-      const r = await fetch("mock/meters.json", { cache: "no-store" });
+      const r = await fetch("/site/mock/meters.json", { cache: "no-store" });
       if (!r.ok) throw new Error(`mock HTTP ${r.status}`);
       return r.json();
     },
@@ -88,7 +91,7 @@
     baseIn.value = api.getBase();
 
     const updateDocLinks = () => {
-      const b = api.getBase();
+      const b = api.getBase().replace(/\/api$/, "");
       if (docs) docs.href = `${b}/docs`;
       if (redoc) redoc.href = `${b}/redoc`;
     };

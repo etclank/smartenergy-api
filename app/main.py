@@ -7,6 +7,7 @@ import time
 from app.core.logging import setup_logging
 from app.core.cache import get_redis, close_redis
 from app.core.config import settings
+from app.core.db import engine
 from app.core import telemetry
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import RedirectResponse
@@ -21,15 +22,17 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         await get_redis()
     except Exception:
         pass
-    yield
     try:
+        yield
+    finally:
         await close_redis()
-    except Exception:
-        pass
+        await engine.dispose()
+
 
 setup_logging()  # 🔹 initialize global logger
 
 app = FastAPI(title="SmartEnergy API", version="0.1.0", lifespan=lifespan)
+
 
 # ✅ Global metrics middleware
 @app.middleware("http")
@@ -41,7 +44,8 @@ async def prometheus_metrics_middleware(
     latency = time.perf_counter() - start
 
     method = request.method
-    path = request.url.path
+    route = request.scope.get("route")
+    path = getattr(route, "path", "unmatched")
     status = response.status_code
 
     if "REQUEST_COUNT" in globals():
@@ -50,6 +54,7 @@ async def prometheus_metrics_middleware(
         REQUEST_LATENCY.labels(method=method, path=path).observe(latency)
 
     return response
+
 
 # Initialize OpenTelemetry if enabled
 telemetry.init_telemetry(app)
@@ -69,6 +74,7 @@ app.include_router(api)
 app.mount("/site", StaticFiles(directory="site", html=True), name="site")
 
 logger.info("SmartEnergy API startup complete")
+
 
 @app.get("/", include_in_schema=False)
 async def root() -> RedirectResponse:

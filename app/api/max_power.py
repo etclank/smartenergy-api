@@ -1,5 +1,5 @@
 # app/api/max_power.py
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Request, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from app.core.deps import get_db
@@ -9,9 +9,11 @@ from app.api.utils.cache_utils import cache_response
 
 router = APIRouter(prefix="/max_power", tags=["energy"])
 
+
 @router.get("/", response_model=list[MaxPowerOut], status_code=status.HTTP_200_OK)
 @cache_response(ttl=120)
 async def list_max_power(
+    request: Request,
     meter_id: int | None = Query(None),
     db: AsyncSession = Depends(get_db),
 ) -> list[MaxPowerOut]:

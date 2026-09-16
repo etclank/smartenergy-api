@@ -10,16 +10,24 @@ if not settings.jwt_secret:
         detail="JWT_SECRET is not configured",
     )
 
+if settings.env == "prod" and len(settings.jwt_secret) < 32:
+    raise RuntimeError("JWT_SECRET must contain at least 32 characters in production")
+
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
 
 def hash_password(p: str) -> str:
     return pwd_context.hash(p)
 
+
 def verify_password(p: str, hashed: str) -> bool:
-    return pwd_context.verify(p, hashed)
+    try:
+        return pwd_context.verify(p, hashed)
+    except (ValueError, TypeError):
+        return False
+
 
 def create_access_token(sub: str) -> str:
     exp = datetime.now(timezone.utc) + timedelta(minutes=settings.jwt_expire_minutes)
     payload = {"sub": sub, "exp": exp}
     return jwt.encode(payload, settings.jwt_secret, algorithm=settings.jwt_algorithm)
-

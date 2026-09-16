@@ -9,9 +9,9 @@ APP_NAME    ?= smartenergy-api
 
 # App config
 PORT        ?= 8000
-ENV         ?= prod
+ENV         ?= dev
 DATABASE_URL?= sqlite+aiosqlite:///./app.db   # absolute: sqlite+aiosqlite:////tmp/app.db
-JWT_SECRET  ?= dev
+JWT_SECRET  ?=
 
 # Paths
 DOCKERFILE  ?= docker/Dockerfile
@@ -42,7 +42,7 @@ help:
 	@echo "  make smoke         → run API + Redis health checks"
 	@echo ""
 	@echo "Utilities:"
-	@echo "  make clean         → remove all containers, volumes, networks"
+	@echo "  make clean         → remove this project’s containers (preserve database volume)"
 	@echo "  make seed-demo     → run demo seeder inside API container"
 	@echo "--------------------------------"
 	@echo "Variables (override like VAR=value make up-sqlite):"
@@ -59,9 +59,10 @@ build:
 .PHONY: up-sqlite
 up-sqlite: build
 	@echo "→ Starting FastAPI + SQLite container"
-	$(DOCKER) run -d \
+	@test -n "$(JWT_SECRET)" || (echo "Set JWT_SECRET before starting the container"; exit 1)
+	@$(DOCKER) run -d \
 		--name $(APP_NAME)-sqlite \
-		-p $(PORT):8000 \
+		-p 127.0.0.1:$(PORT):8000 \
 		-e ENV=$(ENV) \
 		-e DATABASE_URL="$(DATABASE_URL)" \
 		-e JWT_SECRET="$(JWT_SECRET)" \
@@ -96,7 +97,7 @@ up-pg:
 .PHONY: down-pg
 down-pg:
 	@echo "→ Stopping Postgres + Redis + API stack"
-	$(DC) down -v --remove-orphans || true
+	$(DC) down --remove-orphans
 	@echo "✓ Stack removed"
 
 .PHONY: logs-pg
@@ -121,11 +122,9 @@ seed-demo:
 
 .PHONY: clean
 clean:
-	@echo "→ Cleaning up all containers, networks, and volumes..."
-	$(DC) down -v --remove-orphans || true
-	$(DOCKER) rm -f $$(docker ps -aq --filter "name=$(APP_NAME)") 2>/dev/null || true
-	$(DOCKER) volume prune -f >/dev/null || true
-	$(DOCKER) network prune -f >/dev/null || true
+	@echo "→ Removing this project’s containers; preserving database volumes..."
+	$(DC) down --remove-orphans
+	-$(DOCKER) rm -f $(APP_NAME)-sqlite
 	@echo "✓ Environment reset complete"
 
 # ==============================
@@ -137,19 +136,19 @@ worker: ## Run Celery worker with Beat scheduler
 
 .PHONY: tasks-refresh
 tasks-refresh: ## Trigger manual KPI refresh
-	curl -s -X POST http://localhost:8000/api/tasks/refresh-kpis | jq
+	@curl --fail-with-body -s -H "Authorization: Bearer $(TOKEN)" -X POST http://localhost:8000/api/tasks/refresh-kpis | jq
 
 .PHONY: tasks-warm
 tasks-warm: ## Trigger manual cache warmup
-	curl -s -X POST http://localhost:8000/api/tasks/cache/warmup | jq
+	@curl --fail-with-body -s -H "Authorization: Bearer $(TOKEN)" -X POST http://localhost:8000/api/tasks/cache/warmup | jq
 
 .PHONY: tasks-backup
 tasks-backup:
-	curl -s -X POST http://localhost:8000/api/tasks/backup/db | jq
+	@curl --fail-with-body -s -H "Authorization: Bearer $(TOKEN)" -X POST http://localhost:8000/api/tasks/backup/db | jq
 
 .PHONY: tasks-email
 tasks-email:
-	curl -s -X POST http://localhost:8000/api/tasks/email/health | jq
+	@curl --fail-with-body -s -H "Authorization: Bearer $(TOKEN)" -X POST http://localhost:8000/api/tasks/email/health | jq
 
 
 # ==============================

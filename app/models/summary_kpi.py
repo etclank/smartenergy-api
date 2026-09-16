@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from app.models.site import Site
 
+
 class SummaryKPI(Base):
     __tablename__ = "summary_kpi"
 
@@ -22,7 +23,9 @@ class SummaryKPI(Base):
     exported_kwh: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
     avg_max_power: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
 
-    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=datetime.utcnow
+    )
 
     site: Mapped["Site"] = relationship()
 

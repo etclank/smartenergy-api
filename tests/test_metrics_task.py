@@ -18,10 +18,14 @@ async def test_record_system_metrics_task(db_session):
 
     # Retrieve last recorded SystemMetrics ORM row
     rows = (
-        await db_session.execute(
-            select(SystemMetrics).order_by(SystemMetrics.id.desc()).limit(1)
+        (
+            await db_session.execute(
+                select(SystemMetrics).order_by(SystemMetrics.id.desc()).limit(1)
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     assert rows, "SystemMetrics table should have at least one entry"
 
     row = rows[0]

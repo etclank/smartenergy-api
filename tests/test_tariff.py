@@ -2,6 +2,7 @@
 import pytest
 from fastapi import status
 
+
 @pytest.mark.asyncio
 async def test_list_tariffs(client):
     """GET /api/tariffs/ should return a list of tariffs."""

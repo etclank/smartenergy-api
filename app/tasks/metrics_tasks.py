@@ -27,86 +27,103 @@ async def record_system_metrics() -> dict:
     """
     engine = get_async_engine()
     SessionLocal = async_sessionmaker_dep(engine)
-
-    db_ms = redis_ms = -1
-    counts: dict[str, int] = {}
-
-    # --------------------------------------------------
-    # DB ping
-    # --------------------------------------------------
     try:
-        t0 = time.perf_counter()
-        async with engine.begin() as conn:
-            await conn.execute(text("SELECT 1"))
-        db_ms = int(1000 * (time.perf_counter() - t0))
-    except Exception:
-        db_ms = -1
+        db_ms = redis_ms = -1
+        counts: dict[str, int] = {}
 
-    # --------------------------------------------------
-    # Redis ping
-    # --------------------------------------------------
-    try:
-        r = await get_redis()
-        if r:
-            t1 = time.perf_counter()
-            await r.ping()
-            redis_ms = int(1000 * (time.perf_counter() - t1))
-    except Exception:
-        redis_ms = -1
+        # --------------------------------------------------
+        # DB ping
+        # --------------------------------------------------
+        try:
+            t0 = time.perf_counter()
+            async with engine.begin() as conn:
+                await conn.execute(text("SELECT 1"))
+            db_ms = int(1000 * (time.perf_counter() - t0))
+        except Exception:
+            db_ms = -1
 
-    # --------------------------------------------------
-    # Process stats via psutil
-    # --------------------------------------------------
-    try:
-        proc = psutil.Process()
-        with proc.oneshot():
-            cpu_percent = psutil.cpu_percent(interval=0.1)
-            mem_percent = proc.memory_percent()
-            uptime_seconds = time.time() - proc.create_time()
-    except Exception:
-        cpu_percent = mem_percent = uptime_seconds = None
+        # --------------------------------------------------
+        # Redis ping
+        # --------------------------------------------------
+        try:
+            r = await get_redis()
+            if r:
+                t1 = time.perf_counter()
+                await r.ping()
+                redis_ms = int(1000 * (time.perf_counter() - t1))
+        except Exception:
+            redis_ms = -1
 
-    # --------------------------------------------------
-    # Row counts + insert metrics record
-    # --------------------------------------------------
-    try:
-        async with SessionLocal() as db:
-            counts = {
-                "sites": (await db.execute(select(func.count(Site.id)))).scalar() or 0,
-                "meters": (await db.execute(select(func.count(Meter.id)))).scalar() or 0,
-                "energy_imported": (await db.execute(select(func.count(EnergyImported.id)))).scalar() or 0,
-                "energy_exported": (await db.execute(select(func.count(EnergyExported.id)))).scalar() or 0,
-                "energy_reactive": (await db.execute(select(func.count(EnergyReactive.id)))).scalar() or 0,
-                "max_power": (await db.execute(select(func.count(MaxPower.id)))).scalar() or 0,
-            }
+        # --------------------------------------------------
+        # Process stats via psutil
+        # --------------------------------------------------
+        try:
+            proc = psutil.Process()
+            with proc.oneshot():
+                cpu_percent = psutil.cpu_percent(interval=0.1)
+                mem_percent = proc.memory_percent()
+                uptime_seconds = time.time() - proc.create_time()
+        except Exception:
+            cpu_percent = mem_percent = uptime_seconds = None
 
-            db.add(
-                SystemMetrics(
-                    db_latency_ms=db_ms,
-                    redis_latency_ms=redis_ms,
-                    row_counts=counts,
-                    cpu_percent=cpu_percent,
-                    mem_percent=mem_percent,
-                    uptime_seconds=uptime_seconds,
+        # --------------------------------------------------
+        # Row counts + insert metrics record
+        # --------------------------------------------------
+        try:
+            async with SessionLocal() as db:
+                counts = {
+                    "sites": (await db.execute(select(func.count(Site.id)))).scalar()
+                    or 0,
+                    "meters": (await db.execute(select(func.count(Meter.id)))).scalar()
+                    or 0,
+                    "energy_imported": (
+                        await db.execute(select(func.count(EnergyImported.id)))
+                    ).scalar()
+                    or 0,
+                    "energy_exported": (
+                        await db.execute(select(func.count(EnergyExported.id)))
+                    ).scalar()
+                    or 0,
+                    "energy_reactive": (
+                        await db.execute(select(func.count(EnergyReactive.id)))
+                    ).scalar()
+                    or 0,
+                    "max_power": (
+                        await db.execute(select(func.count(MaxPower.id)))
+                    ).scalar()
+                    or 0,
+                }
+
+                db.add(
+                    SystemMetrics(
+                        db_latency_ms=db_ms,
+                        redis_latency_ms=redis_ms,
+                        row_counts=counts,
+                        cpu_percent=cpu_percent,
+                        mem_percent=mem_percent,
+                        uptime_seconds=uptime_seconds,
+                    )
                 )
-            )
-            await db.commit()
-    except Exception:
-        pass  # Safe fail-open
+                await db.commit()
+        except Exception:
+            pass  # Safe fail-open
 
-    # --------------------------------------------------
-    # Return summary
-    # --------------------------------------------------
-    return {
-        "status": "ok",
-        "timestamp": datetime.utcnow().isoformat(),
-        "db_latency_ms": db_ms,
-        "redis_latency_ms": redis_ms,
-        "cpu_percent": cpu_percent,
-        "mem_percent": mem_percent,
-        "uptime_seconds": uptime_seconds,
-        "row_counts": counts,
-    }
+        # --------------------------------------------------
+        # Return summary
+        # --------------------------------------------------
+        return {
+            "status": "ok",
+            "timestamp": datetime.utcnow().isoformat(),
+            "db_latency_ms": db_ms,
+            "redis_latency_ms": redis_ms,
+            "cpu_percent": cpu_percent,
+            "mem_percent": mem_percent,
+            "uptime_seconds": uptime_seconds,
+            "row_counts": counts,
+        }
+
+    finally:
+        await engine.dispose()
 
 
 async def update_meta_cache() -> dict:

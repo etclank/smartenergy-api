@@ -1,14 +1,21 @@
 # tests/test_health_deep.py
 import pytest
 
+
 @pytest.mark.asyncio
 async def test_healthz_up(monkeypatch, client):
     """Health endpoint returns status=up and redis=up when ping succeeds."""
+
     class DummyRedis:
-        async def ping(self): return True
+        async def ping(self):
+            return True
+
     # Patch get_redis to return DummyRedis
     from app.api import health as health_mod
-    async def _get_redis(): return DummyRedis()
+
+    async def _get_redis():
+        return DummyRedis()
+
     monkeypatch.setattr(health_mod, "get_redis", _get_redis)
 
     resp = await client.get("/api/health/z")

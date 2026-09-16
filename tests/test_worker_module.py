@@ -35,6 +35,7 @@ def test_worker_import_and_tasks(monkeypatch):
                 # register on both class and any instance created later
                 cls.tasks[name or fn.__name__] = fn
                 return fn
+
             return decorator
 
         # If module does Celery(...).task, the instance also needs `task`
@@ -43,6 +44,7 @@ def test_worker_import_and_tasks(monkeypatch):
                 self.tasks[name or fn.__name__] = fn
                 type(self).tasks[name or fn.__name__] = fn
                 return fn
+
             return decorator
 
     monkeypatch.setattr(worker_mod, "Celery", DummyCelery)

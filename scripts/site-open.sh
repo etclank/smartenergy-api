@@ -1,3 +1,3 @@
 #!/usr/bin/env bash
 set -euo pipefail
-open "http://localhost:${PORT:-5173}"
+python3 -m webbrowser "http://localhost:${PORT:-5173}/site/"

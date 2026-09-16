@@ -14,7 +14,9 @@ async def send_health_email() -> dict:
     """
     api_key = settings.sendgrid_api_key
     to_email = settings.health_email_to
-    from_email = getattr(settings, "sendgrid_from_email", None) or "noreply@smartenergy.local"
+    from_email = (
+        getattr(settings, "sendgrid_from_email", None) or "noreply@smartenergy.local"
+    )
 
     if not api_key or not to_email:
         return {"status": "skip", "reason": "SendGrid not configured"}
@@ -29,7 +31,7 @@ async def send_health_email() -> dict:
         f"DB latency: {metrics['db_latency_ms']} ms\n"
         f"Redis latency: {metrics['redis_latency_ms']} ms\n\n"
         f"Row counts:\n"
-        + "\n".join([f"  {k}: {v}" for k, v in metrics.get('row_counts', {}).items()])
+        + "\n".join([f"  {k}: {v}" for k, v in metrics.get("row_counts", {}).items()])
     )
 
     message = {

@@ -86,7 +86,9 @@ def setup_logging() -> None:
                 level_name: str = logger.level(record.levelname).name  # str
             except Exception:
                 level_name = str(record.levelno)  # cast to str to unify types
-            logger.opt(depth=6, exception=record.exc_info).log(level_name, record.getMessage())
+            logger.opt(depth=6, exception=record.exc_info).log(
+                level_name, record.getMessage()
+            )
 
     logging.basicConfig(handlers=[InterceptHandler()], level=0)
     logging.getLogger("uvicorn").handlers = [InterceptHandler()]

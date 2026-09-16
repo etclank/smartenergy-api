@@ -8,6 +8,7 @@ if TYPE_CHECKING:
     from app.models.meter import Meter
     from app.models.tariff import Tariff
 
+
 class Site(Base):
     __tablename__ = "sites"
 
@@ -17,5 +18,9 @@ class Site(Base):
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
 
     owner: Mapped["User"] = relationship(back_populates="sites")
-    meters: Mapped[list["Meter"]] = relationship(back_populates="site", cascade="all, delete")
-    tariffs: Mapped[list["Tariff"]] = relationship(back_populates="site", cascade="all, delete")
+    meters: Mapped[list["Meter"]] = relationship(
+        back_populates="site", cascade="all, delete"
+    )
+    tariffs: Mapped[list["Tariff"]] = relationship(
+        back_populates="site", cascade="all, delete"
+    )

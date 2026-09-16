@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 from celery import Celery
 from app.core.config import settings
+from app.core.cache import close_redis
 from app.tasks.refresh_kpis import refresh_kpis
 from app.tasks.demo_data import generate_demo_data, clean_demo_data
 from app.tasks.cache_tasks import clean_stale_cache, warmup_cache
@@ -29,9 +30,16 @@ celery_app.conf.update(
     enable_utc=True,
 )
 
+
 # Helper to run async functions inside Celery worker
 def run_async(coro: Coroutine[Any, Any, dict[str, Any]]) -> dict[str, Any]:
-    return asyncio.run(coro)
+    async def execute() -> dict[str, Any]:
+        try:
+            return await coro
+        finally:
+            await close_redis()
+
+    return asyncio.run(execute())
 
 
 # ----------------------------------------------------------------------
@@ -71,9 +79,11 @@ def t_record_metrics() -> dict[str, Any]:
 def t_update_meta() -> dict[str, Any]:
     return run_async(update_meta_cache())
 
+
 @celery_app.task(name="backup.db")
 def t_backup_db() -> dict[str, Any]:
     return run_async(backup_db_snapshot())
+
 
 @celery_app.task(name="email.health")
 def t_health_email() -> dict[str, Any]:
@@ -122,4 +132,3 @@ celery_app.conf.beat_schedule = {
         "schedule": 60 * 60 * 24,
     },
 }
-

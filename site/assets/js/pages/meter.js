@@ -20,10 +20,10 @@ window.addEventListener("DOMContentLoaded", async () => {
     const m = await API.meterById(id);
     detail.innerHTML = `
       <div class="card">
-        <div class="k">Name</div><div class="v">${m.name}</div>
-        <div class="k">Location</div><div class="v">${m.location}</div>
-        <div class="k">Serial</div><div class="v">${m.serial_number}</div>
-        <div class="k">Type</div><div class="v">${m.type}</div>
+        <div class="k">Name</div><div class="v">${API.escapeHTML(m.name)}</div>
+        <div class="k">Location</div><div class="v">${API.escapeHTML(m.location)}</div>
+        <div class="k">Serial</div><div class="v">${API.escapeHTML(m.serial_number)}</div>
+        <div class="k">Type</div><div class="v">${API.escapeHTML(m.type)}</div>
       </div>`;
 
     // --- Fetch datasets ---
@@ -34,31 +34,7 @@ window.addEventListener("DOMContentLoaded", async () => {
       API.maxPower(id),
     ]);
 
-    // 🕓 --- DEMO OFFSET FIX ---
-    const allTimestamps = [
-      ...imp.map(r => new Date(r.timestamp).getTime()),
-      ...exp.map(r => new Date(r.timestamp).getTime()),
-      ...reac.map(r => new Date(r.timestamp).getTime()),
-      ...maxp.map(r => new Date(r.timestamp).getTime()),
-    ];
-    if (allTimestamps.length) {
-      const newest = Math.max(...allTimestamps);
-      const daysOld = (Date.now() - newest) / (1000 * 60 * 60 * 24);
-      if (daysOld > 3) {
-        const offsetMs = Date.now() - newest;
-        console.log(`[meter] Adjusting demo timestamps by +${Math.round(daysOld)} days`);
-        const shift = (arr) =>
-          arr.map((r) => ({ ...r, timestamp: new Date(new Date(r.timestamp).getTime() + offsetMs).toISOString() }));
-        window.METER_DATA = {
-          imp: shift(imp),
-          exp: shift(exp),
-          reac: shift(reac),
-          maxp: shift(maxp),
-        };
-      } else {
-        window.METER_DATA = { imp, exp, reac, maxp };
-      }
-    }
+    window.METER_DATA = { imp, exp, reac, maxp };
 
     // --- Initial render ---
     const ctx = document.createElement("canvas");

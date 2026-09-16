@@ -27,6 +27,7 @@ class Settings(BaseSettings):
     )
     cache_ttl_seconds: int = Field(
         default=60,
+        ge=1,
         validation_alias=AliasChoices("CACHE_TTL_SECONDS"),
         description="Default cache lifetime (seconds).",
     )
@@ -35,7 +36,9 @@ class Settings(BaseSettings):
     # JWT
     # -------------------------------------------------------------------------
     jwt_secret: str = Field(default="", validation_alias=AliasChoices("JWT_SECRET"))
-    jwt_algorithm: str = Field(default="HS256", validation_alias=AliasChoices("JWT_ALG"))
+    jwt_algorithm: str = Field(
+        default="HS256", validation_alias=AliasChoices("JWT_ALG")
+    )
     jwt_expire_minutes: int = Field(
         default=60, validation_alias=AliasChoices("JWT_EXPIRE_MINUTES")
     )
@@ -44,11 +47,17 @@ class Settings(BaseSettings):
     # Frontend & Demo
     # -------------------------------------------------------------------------
     frontend_origins: List[str] = []
-    seed_demo: str | int | bool = Field(default=1, validation_alias=AliasChoices("SEED_DEMO"))
+    seed_demo: str | int | bool = Field(
+        default=0, validation_alias=AliasChoices("SEED_DEMO")
+    )
 
     # -------------------------------------------------------------------------
     # Celery & Email
     # -------------------------------------------------------------------------
+    demo_password: str = Field(
+        default="", validation_alias=AliasChoices("DEMO_PASSWORD")
+    )
+
     celery_broker_url: str = Field(
         default="",
         validation_alias=AliasChoices("CELERY_BROKER_URL"),

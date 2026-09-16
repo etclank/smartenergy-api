@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, BackgroundTasks, status
+from fastapi import APIRouter, BackgroundTasks, status, Depends, Query
+from app.core.deps import get_current_user
 from app.tasks.refresh_kpis import refresh_kpis
 from app.tasks.demo_data import generate_demo_data, clean_demo_data
 from app.tasks.cache_tasks import clean_stale_cache, warmup_cache
@@ -8,7 +9,9 @@ from app.tasks.metrics_tasks import record_system_metrics, update_meta_cache
 from app.tasks.backup import backup_db_snapshot
 from app.tasks.email import send_health_email
 
-router = APIRouter(prefix="/tasks", tags=["tasks"])
+router = APIRouter(
+    prefix="/tasks", tags=["tasks"], dependencies=[Depends(get_current_user)]
+)
 
 
 # -------------------------------------------------------------------------
@@ -27,7 +30,9 @@ async def trigger_refresh_kpis(bg: BackgroundTasks) -> dict:
 # 2️⃣ Demo Data Lifecycle
 # -------------------------------------------------------------------------
 @router.post("/demo/generate", status_code=status.HTTP_202_ACCEPTED)
-async def trigger_generate_demo(bg: BackgroundTasks, days: int = 7) -> dict:
+async def trigger_generate_demo(
+    bg: BackgroundTasks, days: int = Query(7, ge=1, le=31)
+) -> dict:
     """
     Generate new demo readings (extends existing demo dataset).
     """
@@ -36,7 +41,9 @@ async def trigger_generate_demo(bg: BackgroundTasks, days: int = 7) -> dict:
 
 
 @router.post("/demo/clean", status_code=status.HTTP_202_ACCEPTED)
-async def trigger_clean_demo(bg: BackgroundTasks, older_than_days: int = 30) -> dict:
+async def trigger_clean_demo(
+    bg: BackgroundTasks, older_than_days: int = Query(30, ge=1)
+) -> dict:
     """
     Delete demo data older than N days (rolling demo window).
     """
@@ -85,6 +92,7 @@ async def trigger_meta(bg: BackgroundTasks) -> dict:
     bg.add_task(update_meta_cache)
     return {"queued": "update_meta_cache"}
 
+
 # -------------------------------------------------------------------------
 # 5 Operational tasks
 # -------------------------------------------------------------------------
@@ -92,6 +100,7 @@ async def trigger_meta(bg: BackgroundTasks) -> dict:
 async def trigger_backup(bg: BackgroundTasks) -> dict:
     bg.add_task(backup_db_snapshot)
     return {"queued": "backup_db_snapshot"}
+
 
 @router.post("/email/health", status_code=status.HTTP_202_ACCEPTED)
 async def trigger_health_email(bg: BackgroundTasks) -> dict:

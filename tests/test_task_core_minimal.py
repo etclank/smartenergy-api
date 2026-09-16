@@ -3,6 +3,7 @@ import pytest
 import importlib
 import types
 
+
 # ---------------------------------------------------------------------
 # cache_tasks
 # ---------------------------------------------------------------------
@@ -37,12 +38,18 @@ async def test_cache_tasks_clean_and_warm(monkeypatch):
 
     # 2️⃣ warmup_cache
     class DummyResp:
-        def __init__(self, status_code): self.status_code = status_code
+        def __init__(self, status_code):
+            self.status_code = status_code
 
     class DummyClient:
-        async def __aenter__(self): return self
-        async def __aexit__(self, *a): return None
-        async def get(self, url): return DummyResp(200)
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *a):
+            return None
+
+        async def get(self, url):
+            return DummyResp(200)
 
     monkeypatch.setattr(cache_tasks.httpx, "AsyncClient", lambda *a, **k: DummyClient())
     res2 = await cache_tasks.warmup_cache(base_url="http://test")
@@ -70,12 +77,16 @@ async def test_cache_tasks_clean_fail(monkeypatch):
 async def test_backup_db_snapshot(monkeypatch, tmp_path):
     """Simulate DB snapshot creation and failure."""
     from app.tasks import backup
+
     dbfile = tmp_path / "test.db"
     dbfile.write_text("data")
 
     # Patch settings.database_url to point at tmp_path
     from app.core import config
-    monkeypatch.setattr(config.settings, "database_url", f"sqlite+aiosqlite:///{dbfile}")
+
+    monkeypatch.setattr(
+        config.settings, "database_url", f"sqlite+aiosqlite:///{dbfile}"
+    )
 
     res = await backup.backup_db_snapshot()
     assert res["status"] == "ok"
@@ -87,12 +98,17 @@ async def test_backup_db_snapshot_error(monkeypatch):
     """Force a file creation failure to test error branch."""
     from app.tasks import backup
     from pathlib import Path
-    monkeypatch.setattr(Path, "touch", lambda *a, **k: (_ for _ in ()).throw(OSError("fail")))
+
+    monkeypatch.setattr(
+        Path, "touch", lambda *a, **k: (_ for _ in ()).throw(OSError("fail"))
+    )
     from app.core import config
-    monkeypatch.setattr(config.settings, "database_url", "sqlite+aiosqlite:///missing.db")
+
+    monkeypatch.setattr(
+        config.settings, "database_url", "sqlite+aiosqlite:///missing.db"
+    )
     res = await backup.backup_db_snapshot()
     assert res["status"] == "error"
-
 
 
 # ---------------------------------------------------------------------
@@ -103,6 +119,7 @@ async def test_email_send_health(monkeypatch):
     """Simulate email sending success/failure branches."""
     from app.tasks import email
     from app.core import config
+
     monkeypatch.setattr(config.settings, "sendgrid_api_key", "x")
     monkeypatch.setattr(config.settings, "health_email_to", "demo@example.com")
 
@@ -112,9 +129,14 @@ async def test_email_send_health(monkeypatch):
             self.text = ""
 
     class DummyClient:
-        async def __aenter__(self): return self
-        async def __aexit__(self, *a): pass
-        async def post(self, *a, **k): return DummyResp(202)
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *a):
+            pass
+
+        async def post(self, *a, **k):
+            return DummyResp(202)
 
     monkeypatch.setattr(email.httpx, "AsyncClient", lambda *a, **k: DummyClient())
 
@@ -128,12 +150,12 @@ async def test_email_send_health(monkeypatch):
 
     # Simulate failure (exception during post)
     class FailingClient(DummyClient):
-        async def post(self, *a, **k): raise RuntimeError("fail")
+        async def post(self, *a, **k):
+            raise RuntimeError("fail")
 
     monkeypatch.setattr(email.httpx, "AsyncClient", lambda *a, **k: FailingClient())
     res2 = await email.send_health_email()
     assert res2["status"] == "error"
-
 
 
 # ---------------------------------------------------------------------
@@ -153,6 +175,7 @@ def test_worker_registers_tasks(monkeypatch):
             def decorator(fn):
                 self.tasks[name or fn.__name__] = fn
                 return fn
+
             return decorator
 
         def conf_update(self, **_):
@@ -163,3 +186,14 @@ def test_worker_registers_tasks(monkeypatch):
     app = mod.celery_app
     assert hasattr(app, "tasks")
     assert "kpis.refresh" in app.tasks or "demo.generate" in app.tasks
+
+
+@pytest.mark.asyncio
+async def test_postgres_backup_is_not_reported_as_success(monkeypatch):
+    from app.core.config import settings
+    from app.tasks.backup import backup_db_snapshot
+
+    monkeypatch.setattr(
+        settings, "database_url", "postgresql+asyncpg://localhost/example"
+    )
+    assert (await backup_db_snapshot())["status"] == "skip"

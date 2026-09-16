@@ -49,6 +49,7 @@ if not _metric_exists("cache_hits_total"):
 if not _metric_exists("cache_misses_total"):
     CACHE_MISSES = Counter("cache_misses_total", "Number of cache misses", ["endpoint"])
 
+
 @router.get("", include_in_schema=False)
 @router.get("/", summary="Prometheus metrics")
 async def metrics_endpoint() -> Response:

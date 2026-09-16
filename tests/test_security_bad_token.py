@@ -28,7 +28,8 @@ def test_create_access_token():
 def test_security_module_raises_without_secret(monkeypatch):
     """If JWT_SECRET is empty, importing security raises HTTPException."""
     import app.core.security as sec
-    sec.settings.jwt_secret = ""  # force empty secret
+
+    monkeypatch.setattr(sec.settings, "jwt_secret", "")
 
     with pytest.raises(HTTPException) as exc:
         reload(sec)

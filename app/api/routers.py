@@ -1,6 +1,19 @@
 # app/api/routers.py
 from fastapi import APIRouter
-from . import auth, meters, health, sites, energy_imported, energy_exported, energy_reactive, max_power, tariffs, tasks, metrics, system_metrics
+from . import (
+    auth,
+    meters,
+    health,
+    sites,
+    energy_imported,
+    energy_exported,
+    energy_reactive,
+    max_power,
+    tariffs,
+    tasks,
+    metrics,
+    system_metrics,
+)
 
 api = APIRouter(prefix="/api")
 

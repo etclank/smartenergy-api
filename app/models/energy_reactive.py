@@ -14,6 +14,7 @@ class EnergyReactive(Base):
     Represents reactive energy measurements for a meter.
     Contains both imported and exported reactive values.
     """
+
     __tablename__ = "energy_reactive"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)

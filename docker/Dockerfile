@@ -17,7 +17,7 @@ WORKDIR /app
 # -----------------------------
 # build-essential, gcc: compile native deps
 # curl: for health/debug usage
-# postgresql-client: provides pg_isready for prestart.sh
+# postgresql-client: available for manual database diagnostics
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     gcc \
@@ -41,6 +41,10 @@ RUN pip install "poetry==2.2.1" \
 # Copy application source
 # -----------------------------
 COPY . /app
+RUN useradd --create-home --uid 10001 appuser \
+ && mkdir -p /app/logs /app/backups \
+ && chown -R appuser:appuser /app
+USER appuser
 
 # Ensure prestart script is executable
 RUN chmod +x /app/scripts/prestart.sh
@@ -57,7 +61,7 @@ ENV PORT=8000
 # Healthcheck (basic HTTP ping)
 # -----------------------------
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s \
-  CMD curl -fs http://localhost:8000/api/health/z || exit 1
+  CMD curl -fs http://localhost:${PORT:-8000}/api/health/z || exit 1
 
 # -----------------------------
 # Expose API port
@@ -68,7 +72,6 @@ EXPOSE 8000
 # Entrypoint
 # -----------------------------
 # Default entrypoint runs prestart.sh which:
-#  - Waits for Postgres
 #  - Runs lightweight DB init (create_all + seed)
 #  - Starts Uvicorn
 #

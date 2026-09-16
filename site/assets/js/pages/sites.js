@@ -11,7 +11,7 @@ window.addEventListener("DOMContentLoaded", async () => {
     list.innerHTML = "";
     sites.forEach((s) => {
       const li = document.createElement("li");
-      li.innerHTML = `<a href="/site/pages/meters.html?site_id=${s.id}">${s.name}</a> – ${s.location || ""}`;
+      li.innerHTML = `<a href="/site/pages/meters.html?site_id=${s.id}">${API.escapeHTML(s.name)}</a> – ${API.escapeHTML(s.location || "")}`;
       list.appendChild(li);
     });
   } catch (e) {

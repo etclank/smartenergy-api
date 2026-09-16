@@ -1,0 +1,59 @@
+name: smartenergy
+
+# Runtime-only deployment: provision PostgreSQL and Redis separately.
+services:
+  api:
+    image: ${SMARTENERGY_IMAGE:?Set an immutable SMARTENERGY_IMAGE in .env.vm}
+    env_file: ../.env.vm
+    environment:
+      ENV: prod
+      ROLE: web
+      PORT: "8000"
+      SEED_DEMO: "0"
+      ENABLE_TELEMETRY: "0"
+    ports:
+      - "127.0.0.1:8000:8000"
+    restart: unless-stopped
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    tmpfs:
+      - /tmp:uid=10001,gid=10001,mode=1770,size=64m
+      - /app/logs:uid=10001,gid=10001,mode=0750,size=64m
+    cpus: 0.5
+    mem_limit: 512m
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  worker:
+    profiles: [worker]
+    image: ${SMARTENERGY_IMAGE:?Set an immutable SMARTENERGY_IMAGE in .env.vm}
+    env_file: ../.env.vm
+    environment:
+      ENV: prod
+      API_HOST: api
+      API_PORT: "8000"
+      ENABLE_TELEMETRY: "0"
+    command: [celery, -A, app.tasks.worker.celery_app, worker, --beat, --concurrency=1, --loglevel=info, --schedule=/tmp/celerybeat-schedule]
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      disable: true
+    restart: unless-stopped
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    tmpfs:
+      - /tmp:uid=10001,gid=10001,mode=1770,size=64m
+      - /app/logs:uid=10001,gid=10001,mode=0750,size=64m
+    cpus: 0.5
+    mem_limit: 512m
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"

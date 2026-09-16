@@ -5,8 +5,8 @@ window.renderBreadcrumb = function (container, trail) {
   container.innerHTML = trail
     .map((t, i) =>
       i < trail.length - 1
-        ? `<a href="${t.href}">${t.label}</a> &rsaquo; `
-        : `<span>${t.label}</span>`
+        ? `<a href="${API.escapeHTML(t.href)}">${API.escapeHTML(t.label)}</a> &rsaquo; `
+        : `<span>${API.escapeHTML(t.label)}</span>`
     )
     .join("");
 };

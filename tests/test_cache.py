@@ -3,6 +3,7 @@ import pytest
 from app.core.cache import ping_redis, get_redis
 from app.core.config import settings
 
+
 @pytest.mark.asyncio
 async def test_redis_connection_or_skip():
     """Verify Redis is reachable or skip test gracefully."""

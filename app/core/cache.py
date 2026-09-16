@@ -23,11 +23,13 @@ async def get_redis() -> Optional[redis.Redis]:
             settings.redis_url,
             decode_responses=True,
             encoding="utf-8",
+            socket_connect_timeout=1,
+            socket_timeout=1,
         )
         await _client.ping()
-        print(f"[cache] Connected to Redis: {settings.redis_url}")
-    except Exception as e:
-        print(f"[cache] Redis unavailable ({e})")
+        print("[cache] Connected to Redis")
+    except Exception:
+        print("[cache] Redis unavailable")
         _client = None
 
     return _client

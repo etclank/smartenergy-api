@@ -13,8 +13,10 @@ metadata = MetaData(
     }
 )
 
+
 class Base(DeclarativeBase):
     """Unified declarative base for all SmartEnergy models."""
+
     metadata = metadata
 
     # automatically generate __tablename__ if not explicitly set

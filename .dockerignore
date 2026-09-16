@@ -18,3 +18,11 @@ site/node_modules/
 app.db
 alembic/versions/__pycache__/
 tests/__pycache__/
+
+.git/
+.env.*
+!.env.example
+backups/
+logs/
+.ruff_cache/
+celerybeat-schedule*

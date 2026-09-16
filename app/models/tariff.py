@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from app.models.site import Site
 
+
 class Tariff(Base):
     __tablename__ = "tariffs"
 

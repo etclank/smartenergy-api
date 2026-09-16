@@ -9,7 +9,7 @@ window.addEventListener("DOMContentLoaded", async () => {
   try {
     // Fetch tariffs (filtered or all)
     const tariffs = siteId
-      ? await API.req(`tariffs/?site_id=${siteId}`)
+      ? await API.req(`tariffs/?site_id=${encodeURIComponent(siteId)}`)
       : await API.req("tariffs/");
 
     // If filtered, try to derive site info for breadcrumb
@@ -25,7 +25,7 @@ window.addEventListener("DOMContentLoaded", async () => {
     ];
     if (siteId && siteName) {
       crumbs.splice(1, 0, { label: "Sites", href: "/site/pages/sites.html" });
-      crumbs.splice(2, 0, { label: siteName, href: `/site/pages/tariffs.html?site_id=${siteId}` });
+      crumbs.splice(2, 0, { label: siteName, href: `/site/pages/tariffs.html?site_id=${encodeURIComponent(siteId)}` });
     }
     renderBreadcrumb(breadcrumb, crumbs);
 
@@ -38,10 +38,10 @@ window.addEventListener("DOMContentLoaded", async () => {
         const li = document.createElement("li");
         li.className = "tariff-row";
         li.innerHTML = `
-          <div class="tariff-name">${t.name}</div>
+          <div class="tariff-name">${API.escapeHTML(t.name)}</div>
           <div class="tariff-meta">
             <span class="price">${t.price_per_kwh.toFixed(3)} €/kWh</span>
-            <span class="site">(${t.site?.name || "Unknown site"})</span>
+            <span class="site">(${API.escapeHTML(t.site?.name || "Unknown site")})</span>
           </div>
         `;
         list.appendChild(li);

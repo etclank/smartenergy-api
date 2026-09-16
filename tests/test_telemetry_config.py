@@ -11,6 +11,7 @@ def test_telemetry_disabled(monkeypatch, caplog):
     monkeypatch.delenv("ENABLE_TELEMETRY", raising=False)
     caplog.set_level("INFO")
     from app.core import telemetry
+
     importlib.reload(telemetry)
     telemetry.init_telemetry(DummyApp())
     assert any("disabled" in m.lower() for m in caplog.messages)
@@ -22,6 +23,7 @@ def test_telemetry_enabled_console(monkeypatch):
     monkeypatch.delenv("OTEL_EXPORTER_OTLP_ENDPOINT", raising=False)
 
     from app.core import telemetry
+
     monkeypatch.setattr(
         telemetry,
         "TracerProvider",
@@ -30,16 +32,24 @@ def test_telemetry_enabled_console(monkeypatch):
     monkeypatch.setattr(telemetry, "BatchSpanProcessor", lambda *_: None)
     monkeypatch.setattr(telemetry, "ConsoleSpanExporter", lambda *_: object())
     monkeypatch.setattr(
-        telemetry, "FastAPIInstrumentor", types.SimpleNamespace(instrument_app=lambda *_: None)
+        telemetry,
+        "FastAPIInstrumentor",
+        types.SimpleNamespace(instrument_app=lambda *_: None),
     )
     monkeypatch.setattr(
-        telemetry, "HTTPXClientInstrumentor", lambda *_: types.SimpleNamespace(instrument=lambda *_: None)
+        telemetry,
+        "HTTPXClientInstrumentor",
+        lambda *_: types.SimpleNamespace(instrument=lambda *_: None),
     )
     monkeypatch.setattr(
-        telemetry, "RedisInstrumentor", lambda *_: types.SimpleNamespace(instrument=lambda *_: None)
+        telemetry,
+        "RedisInstrumentor",
+        lambda *_: types.SimpleNamespace(instrument=lambda *_: None),
     )
     monkeypatch.setattr(
-        telemetry, "SQLAlchemyInstrumentor", lambda *_: types.SimpleNamespace(instrument=lambda *_: None)
+        telemetry,
+        "SQLAlchemyInstrumentor",
+        lambda *_: types.SimpleNamespace(instrument=lambda *_: None),
     )
 
     telemetry.init_telemetry(DummyApp())
@@ -82,16 +92,24 @@ def test_telemetry_enabled_otlp(monkeypatch):
     )
     monkeypatch.setattr(telemetry, "BatchSpanProcessor", lambda *_: None)
     monkeypatch.setattr(
-        telemetry, "FastAPIInstrumentor", types.SimpleNamespace(instrument_app=lambda *_: None)
+        telemetry,
+        "FastAPIInstrumentor",
+        types.SimpleNamespace(instrument_app=lambda *_: None),
     )
     monkeypatch.setattr(
-        telemetry, "HTTPXClientInstrumentor", lambda *_: types.SimpleNamespace(instrument=lambda *_: None)
+        telemetry,
+        "HTTPXClientInstrumentor",
+        lambda *_: types.SimpleNamespace(instrument=lambda *_: None),
     )
     monkeypatch.setattr(
-        telemetry, "RedisInstrumentor", lambda *_: types.SimpleNamespace(instrument=lambda *_: None)
+        telemetry,
+        "RedisInstrumentor",
+        lambda *_: types.SimpleNamespace(instrument=lambda *_: None),
     )
     monkeypatch.setattr(
-        telemetry, "SQLAlchemyInstrumentor", lambda *_: types.SimpleNamespace(instrument=lambda *_: None)
+        telemetry,
+        "SQLAlchemyInstrumentor",
+        lambda *_: types.SimpleNamespace(instrument=lambda *_: None),
     )
 
     telemetry.init_telemetry(DummyApp())

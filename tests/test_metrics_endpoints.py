@@ -2,6 +2,7 @@
 import pytest
 from fastapi import status
 
+
 @pytest.mark.asyncio
 async def test_metrics_endpoint_exposes_prometheus(client):
     """GET /api/metrics should return valid Prometheus exposition text."""

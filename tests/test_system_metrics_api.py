@@ -3,6 +3,7 @@ import pytest
 from fastapi import status
 from app.models.system_metrics import SystemMetrics
 
+
 @pytest.mark.asyncio
 async def test_system_metrics_latest_and_list(client, db_session):
     """Verify /api/system_metrics/latest and /api/system_metrics/ endpoints."""

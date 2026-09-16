@@ -10,6 +10,7 @@ if TYPE_CHECKING:
     from app.models.energy_reactive import EnergyReactive
     from app.models.max_power import MaxPower
 
+
 class Meter(Base):
     __tablename__ = "meters"
 
@@ -22,7 +23,15 @@ class Meter(Base):
 
     site: Mapped["Site"] = relationship(back_populates="meters")
 
-    imported_readings: Mapped[list["EnergyImported"]] = relationship(back_populates="meter", cascade="all, delete")
-    exported_readings: Mapped[list["EnergyExported"]] = relationship(back_populates="meter", cascade="all, delete")
-    reactive_readings: Mapped[list["EnergyReactive"]] = relationship(back_populates="meter", cascade="all, delete")
-    max_power_readings: Mapped[list["MaxPower"]] = relationship(back_populates="meter", cascade="all, delete")
+    imported_readings: Mapped[list["EnergyImported"]] = relationship(
+        back_populates="meter", cascade="all, delete"
+    )
+    exported_readings: Mapped[list["EnergyExported"]] = relationship(
+        back_populates="meter", cascade="all, delete"
+    )
+    reactive_readings: Mapped[list["EnergyReactive"]] = relationship(
+        back_populates="meter", cascade="all, delete"
+    )
+    max_power_readings: Mapped[list["MaxPower"]] = relationship(
+        back_populates="meter", cascade="all, delete"
+    )

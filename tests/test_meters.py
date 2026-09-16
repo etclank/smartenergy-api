@@ -2,8 +2,9 @@
 import pytest
 from fastapi import status
 
+
 @pytest.mark.asyncio
-async def test_create_meter(client):
+async def test_create_meter(authenticated_client):
     """POST /api/meters/ should create a new meter."""
     payload = {
         "name": "Test Meter",
@@ -12,7 +13,7 @@ async def test_create_meter(client):
         "type": "single-phase",
         "site_id": 1,  # adjust if FK required
     }
-    resp = await client.post("/api/meters/", json=payload)
+    resp = await authenticated_client.post("/api/meters/", json=payload)
     assert resp.status_code == status.HTTP_201_CREATED
     data = resp.json()
     assert data["name"] == "Test Meter"
@@ -22,9 +23,9 @@ async def test_create_meter(client):
 
 
 @pytest.mark.asyncio
-async def test_list_meters(client):
+async def test_list_meters(authenticated_client):
     """GET /api/meters/ should return a list of meters."""
-    resp = await client.get("/api/meters/")
+    resp = await authenticated_client.get("/api/meters/")
     assert resp.status_code == status.HTTP_200_OK
     data = resp.json()
     assert isinstance(data, list)
@@ -33,7 +34,7 @@ async def test_list_meters(client):
 
 
 @pytest.mark.asyncio
-async def test_get_meter_by_id(client):
+async def test_get_meter_by_id(authenticated_client):
     """GET /api/meters/{id} should retrieve a meter."""
     # Create first
     create_payload = {
@@ -43,13 +44,13 @@ async def test_get_meter_by_id(client):
         "type": "three-phase",
         "site_id": 1,
     }
-    create_resp = await client.post("/api/meters/", json=create_payload)
+    create_resp = await authenticated_client.post("/api/meters/", json=create_payload)
     assert create_resp.status_code == status.HTTP_201_CREATED
     created = create_resp.json()
 
     # Retrieve by ID
     meter_id = created["id"]
-    resp = await client.get(f"/api/meters/{meter_id}")
+    resp = await authenticated_client.get(f"/api/meters/{meter_id}")
     assert resp.status_code == status.HTTP_200_OK
     data = resp.json()
     assert data["id"] == meter_id

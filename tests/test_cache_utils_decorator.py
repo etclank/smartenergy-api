@@ -5,13 +5,20 @@ from httpx import AsyncClient
 
 from app.api.utils.cache_utils import cache_response
 
+
 @pytest.mark.asyncio
 async def test_cache_decorator_hit_and_miss(monkeypatch):
     """Simulate cache miss then hit using fake cache_get/set."""
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "redis_url", "redis://test")
     store = {}
 
-    async def fake_cache_get(key): return store.get(key)
-    async def fake_cache_set(key, val, ttl): store[key] = val
+    async def fake_cache_get(key):
+        return store.get(key)
+
+    async def fake_cache_set(key, val, ttl):
+        store[key] = val
 
     monkeypatch.setattr("app.api.utils.cache_utils.cache_get", fake_cache_get)
     monkeypatch.setattr("app.api.utils.cache_utils.cache_set", fake_cache_set)
@@ -44,6 +51,7 @@ async def test_cache_decorator_hit_and_miss(monkeypatch):
 async def test_cache_decorator_no_redis(monkeypatch):
     """If redis_url disabled, decorator calls underlying func directly."""
     from app.api.utils import cache_utils as cu
+
     monkeypatch.setattr(cu.settings, "redis_url", "")
     calls = {"count": 0}
 
@@ -55,3 +63,53 @@ async def test_cache_decorator_no_redis(monkeypatch):
     # Direct call simulating FastAPI dependency
     result = await handler(request=Request(scope={"type": "http"}))
     assert result == {"x": 1}
+
+
+@pytest.mark.asyncio
+async def test_real_routes_cache_models_and_separate_paths_and_filters(
+    client, db_session, monkeypatch
+):
+    from app.core.config import settings
+    from app.models import Meter
+    from app.api.utils import cache_utils
+
+    monkeypatch.setattr(settings, "redis_url", "redis://test")
+    store = {}
+    writes = []
+
+    async def get(key):
+        return store.get(key)
+
+    async def put(key, value, ttl):
+        import json
+
+        store[key] = json.loads(json.dumps(value))
+        writes.append((key, ttl))
+
+    monkeypatch.setattr(cache_utils, "cache_get", get)
+    monkeypatch.setattr(cache_utils, "cache_set", put)
+    meters = [
+        Meter(
+            name=f"cache-{i}",
+            location="test",
+            serial_number=f"cache-{i}",
+            type="electric",
+            site_id=1,
+        )
+        for i in (1, 2)
+    ]
+    db_session.add_all(meters)
+    await db_session.commit()
+    for meter in meters:
+        result = await client.get(f"/api/meters/{meter.id}")
+        assert result.status_code == 200
+        assert result.json()["id"] == meter.id
+    repeat = await client.get(f"/api/meters/{meters[0].id}")
+    assert repeat.json()["id"] == meters[0].id
+    assert len(writes) == 2
+    for mid in (1, 2):
+        assert (
+            await client.get(f"/api/energy_imported/?meter_id={mid}")
+        ).status_code == 200
+    assert len(store) == 4
+    assert all(ttl > 0 for _, ttl in writes)

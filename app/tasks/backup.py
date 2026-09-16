@@ -5,16 +5,27 @@ from app.core.config import settings
 import shutil
 import os
 
+
 async def backup_db_snapshot() -> dict:
     """
     Create a lightweight DB snapshot file for demo/testing.
     Uses /app/backups in Docker, but falls back to ./backups locally.
     """
+    if not settings.database_url.startswith("sqlite+aiosqlite:///"):
+        return {
+            "status": "skip",
+            "reason": "Only local SQLite file snapshots are supported",
+        }
+
     # Prefer /app/backups (container), fallback for local tests
     default_dir = Path("/app/backups")
     local_dir = Path("./backups")
 
-    backups_dir = default_dir if default_dir.exists() and os.access(default_dir.parent, os.W_OK) else local_dir
+    backups_dir = (
+        default_dir
+        if default_dir.exists() and os.access(default_dir.parent, os.W_OK)
+        else local_dir
+    )
     backups_dir.mkdir(parents=True, exist_ok=True)
 
     timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
@@ -28,6 +39,10 @@ async def backup_db_snapshot() -> dict:
         else:
             # No file yet in memory DB
             target.touch()
-            return {"status": "ok", "backup_file": str(target), "note": "empty DB created"}
+            return {
+                "status": "ok",
+                "backup_file": str(target),
+                "note": "empty DB created",
+            }
     except Exception as e:
         return {"status": "error", "error": str(e)}

@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 from functools import wraps
 from fastapi import Request
+from fastapi.encoders import jsonable_encoder
 from typing import Awaitable, Callable, Optional, TypeVar, ParamSpec, TYPE_CHECKING
 from prometheus_client import Counter
 
@@ -23,6 +24,7 @@ if TYPE_CHECKING:
 # Optional metrics integration (safe runtime import)
 try:
     from app.api.metrics import CACHE_HITS as _CACHE_HITS, CACHE_MISSES as _CACHE_MISSES
+
     _hits: Optional[Counter] = _CACHE_HITS
     _misses: Optional[Counter] = _CACHE_MISSES
 except Exception:  # pragma: no cover
@@ -36,7 +38,9 @@ P = ParamSpec("P")
 R = TypeVar("R")
 
 
-def cache_response(ttl: Optional[int] = None) -> Callable[[Callable[P, Awaitable[R]]], Callable[P, Awaitable[R]]]:
+def cache_response(
+    ttl: Optional[int] = None,
+) -> Callable[[Callable[P, Awaitable[R]]], Callable[P, Awaitable[R]]]:
     """
     Decorator for caching route responses in Redis.
 
@@ -76,8 +80,9 @@ def cache_response(ttl: Optional[int] = None) -> Callable[[Callable[P, Awaitable
             # Compute and cache
             response = await func(*args, **kwargs)
             try:
-                json.dumps(response)
-                await cache_set(cache_key, response, ttl or settings.cache_ttl_seconds)
+                encoded = jsonable_encoder(response)
+                json.dumps(encoded)
+                await cache_set(cache_key, encoded, ttl or settings.cache_ttl_seconds)
                 if CACHE_MISSES:
                     CACHE_MISSES.labels(endpoint=path).inc()
             except Exception:
