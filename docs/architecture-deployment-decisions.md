@@ -1,11 +1,11 @@
 # Architecture and Deployment Decisions
 
-Status: approved design for the hosted SmartEnergy deployment. Unless a section says otherwise, these decisions describe planned work and are not claims about the current implementation.
+Status: approved design for the hosted SmartEnergy deployment. D1 is implemented in application tooling; its Kubernetes migration Job remains future work. Unless a section says otherwise, the remaining decisions describe planned work and are not claims about the current implementation.
 
 ## D1 — Versioned schema lifecycle
 
 - **Decision:** Use Alembic before persistent PostgreSQL deployment. Run upgrades in a migration Job and start the API without DDL.
-- **Context:** API startup currently runs `create_all`, direct legacy `ALTER TABLE` statements, and optional seeding.
+- **Context:** API startup previously ran `create_all`, direct legacy `ALTER TABLE` statements, and optional seeding. It now starts without schema mutation.
 - **Reason:** Persistent data needs ordered, reviewable, testable schema revisions.
 - **Trade-off:** Releases gain migration files, compatibility work, and another Job.
 - **Reconsider when:** The database is permanently disposable or a better SQLAlchemy-compatible lifecycle is proven.

@@ -8,7 +8,7 @@ The [architecture decision record](architecture-deployment-decisions.md) is the 
 
 The repository currently provides:
 
-- a local Compose stack with PostgreSQL 16, Redis 7, the API, and a Celery worker that also runs Beat;
+- a local Compose stack with PostgreSQL 16, a one-shot Alembic migration service, Redis 7, the API, and a Celery worker that also runs Beat;
 - a runtime-only VM Compose file with an optional combined worker/Beat service;
 - one application image used by the API and worker;
 - a Kubernetes starter containing one API Deployment and ClusterIP Service;
@@ -53,23 +53,41 @@ Separating Beat gives the scheduler an independent lifecycle and resource budget
 
 ## Schema lifecycle
 
-Today the API startup script runs SQLAlchemy `create_all`, conditionally issues direct `ALTER TABLE` statements for legacy telemetry columns, and can optionally seed demo data. That behavior remains available for local and disposable environments, but it is not safe enough for persistent hosted PostgreSQL.
+Alembic now owns schema evolution. The API startup script starts Uvicorn without `create_all`, direct DDL, migrations, or seeding. `scripts/init_db.py` remains an explicit helper that creates the current schema only for a new disposable local SQLite database; it rejects PostgreSQL and does not evolve existing tables or seed data.
 
 The hosted lifecycle will be:
 
 ```text
-Alembic revision in the repository
-→ dedicated migration Job runs `alembic upgrade head`
+database available
+→ dedicated migration step runs `alembic upgrade head`
 → API, worker, and Beat start without schema DDL
 ```
 
-Alembic and the Job are not implemented yet. Schema changes should remain compatible with the previous application release so an image rollback remains possible after a successful migration.
+The migration command is implemented. Its future Kubernetes Job is not. Useful inspection and drift commands are:
+
+```bash
+poetry run alembic current
+poetry run alembic history
+poetry run alembic heads
+poetry run alembic check
+```
+
+For a pre-Alembic database, back up first, then run the guarded adoption command:
+
+```bash
+poetry run python -m scripts.adopt_legacy_schema
+poetry run python -m scripts.adopt_legacy_schema --stamp
+```
+
+The command refuses to stamp when the existing schema differs from the baseline. Never use a blind `alembic stamp head` against an unknown database.
+
+The baseline has a mechanical downgrade for disposable testing, but production rollback does not promise destructive downgrades. Future changes should use expand-and-contract compatibility, a forward fix, or a validated backup restore.
 
 ## Health and metrics contract
 
-Current `/api/health/z` reports process and Redis state but always returns HTTP 200 and does not query PostgreSQL. `/api/health/cachez` is also informational. They do not yet satisfy the hosted readiness contract.
+`/api/health/z` reports process and Redis state with HTTP 200 and remains suitable for liveness. `/api/health/cachez` is informational. `/api/health/readyz` performs a PostgreSQL-compatible `SELECT 1` with a two-second bound and returns HTTP 503 without connection details when the database is unavailable.
 
-The hosted probes will use:
+The probe contract is:
 
 - liveness: process health;
 - readiness: a bounded PostgreSQL `SELECT 1`, returning HTTP 503 on failure;

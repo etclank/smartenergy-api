@@ -1,8 +1,20 @@
-# app/api/health.py (final aligned)
+import asyncio
+
 from fastapi import APIRouter, status
+from fastapi.responses import JSONResponse
+from loguru import logger
+from sqlalchemy import text
+
 from app.core.cache import get_redis
+from app.core.db import engine
 
 router = APIRouter(prefix="/health", tags=["health"])
+READINESS_TIMEOUT_SECONDS = 2.0
+
+
+async def database_ping() -> None:
+    async with engine.connect() as connection:
+        await connection.execute(text("SELECT 1"))
 
 
 @router.get("/z", status_code=status.HTTP_200_OK)
@@ -36,3 +48,20 @@ async def cachez() -> dict[str, str]:
     except Exception:
         pass
     return {"redis": "down"}
+
+
+@router.get("/readyz", response_model=None)
+async def readyz() -> dict[str, str] | JSONResponse:
+    """Report readiness from a bounded PostgreSQL-compatible database query."""
+    try:
+        await asyncio.wait_for(
+            database_ping(),
+            timeout=READINESS_TIMEOUT_SECONDS,
+        )
+    except Exception as exc:
+        logger.warning("Database readiness failed: {}", type(exc).__name__)
+        return JSONResponse(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            content={"status": "not_ready", "database": "unavailable"},
+        )
+    return {"status": "ready"}

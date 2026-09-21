@@ -41,3 +41,46 @@ jobs:
         run: node tests/dashboard_smoke.cjs
       - name: Build image
         run: docker build -f docker/Dockerfile -t smartenergy-api:ci .
+
+  postgres-integration:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: smartenergy_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d smartenergy_test"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@127.0.0.1:5432/smartenergy_test
+      TEST_POSTGRES_URL: postgresql+asyncpg://postgres:postgres@127.0.0.1:5432/smartenergy_test
+      JWT_SECRET: postgres-integration-test-secret
+      REDIS_URL: ""
+      ENABLE_TELEMETRY: "0"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Install Poetry
+        run: pip install poetry==2.2.1
+      - name: Install locked dependencies
+        run: poetry install --no-interaction --no-ansi
+      - name: Upgrade empty PostgreSQL schema
+        run: poetry run alembic upgrade head
+      - name: Verify migration revision and model drift
+        run: |
+          poetry run alembic current
+          poetry run alembic heads
+          poetry run alembic check
+      - name: PostgreSQL integration tests
+        run: >-
+          poetry run pytest --confcutdir=tests/integration
+          tests/integration -m postgres

@@ -1,5 +1,6 @@
 # tests/test_health_deep.py
 import pytest
+import asyncio
 
 
 @pytest.mark.asyncio
@@ -74,3 +75,67 @@ async def test_cachez_up_and_down(monkeypatch, client):
     monkeypatch.setattr(health_mod, "get_redis", _get_bad)
     res_down = await client.get("/api/health/cachez")
     assert res_down.json()["redis"] == "down"
+
+
+@pytest.mark.asyncio
+async def test_readyz_database_healthy(monkeypatch, client):
+    from app.api import health as health_mod
+
+    async def _database_ping():
+        return None
+
+    monkeypatch.setattr(health_mod, "database_ping", _database_ping)
+    response = await client.get("/api/health/readyz")
+
+    assert response.status_code == 200
+    assert response.json() == {"status": "ready"}
+
+
+@pytest.mark.asyncio
+async def test_readyz_database_unavailable(monkeypatch, client):
+    from app.api import health as health_mod
+
+    async def _database_ping():
+        raise ConnectionError("connection details must not reach the response")
+
+    monkeypatch.setattr(health_mod, "database_ping", _database_ping)
+    response = await client.get("/api/health/readyz")
+
+    assert response.status_code == 503
+    assert response.json() == {
+        "status": "not_ready",
+        "database": "unavailable",
+    }
+    assert "connection details" not in response.text
+
+
+@pytest.mark.asyncio
+async def test_readyz_database_timeout_is_bounded(monkeypatch, client):
+    from app.api import health as health_mod
+
+    async def _slow_database_ping():
+        await asyncio.sleep(1)
+
+    monkeypatch.setattr(health_mod, "database_ping", _slow_database_ping)
+    monkeypatch.setattr(health_mod, "READINESS_TIMEOUT_SECONDS", 0.01)
+    response = await client.get("/api/health/readyz")
+
+    assert response.status_code == 503
+
+
+@pytest.mark.asyncio
+async def test_readyz_ignores_redis_failure(monkeypatch, client):
+    from app.api import health as health_mod
+
+    async def _database_ping():
+        return None
+
+    async def _redis_failure():
+        raise RuntimeError("redis unavailable")
+
+    monkeypatch.setattr(health_mod, "database_ping", _database_ping)
+    monkeypatch.setattr(health_mod, "get_redis", _redis_failure)
+
+    response = await client.get("/api/health/readyz")
+    assert response.status_code == 200
+    assert response.json() == {"status": "ready"}

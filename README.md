@@ -13,11 +13,11 @@ poetry install
 cp .env.example .env
 # Generate a local signing secret without printing it:
 poetry run python -c 'import secrets; from pathlib import Path; p=Path(".env"); p.write_text(p.read_text().replace("JWT_SECRET=", "JWT_SECRET=" + secrets.token_urlsafe(48), 1))'
-poetry run python -m scripts.init_db
+poetry run alembic upgrade head
 poetry run uvicorn app.main:app --reload
 ```
 
-Open [the dashboard](http://localhost:8000/site/), [Swagger UI](http://localhost:8000/docs) or [ReDoc](http://localhost:8000/redoc). SQLite is the default in `.env.example`; Redis is optional for the API. The first run creates empty tables.
+Open [the dashboard](http://localhost:8000/site/), [Swagger UI](http://localhost:8000/docs) or [ReDoc](http://localhost:8000/redoc). SQLite is the default in `.env.example`; Redis is optional for the API. The Alembic upgrade creates the empty schema.
 
 For synthetic data, set `DEMO_PASSWORD` to a unique password in `.env`, then run:
 
@@ -25,7 +25,7 @@ For synthetic data, set `DEMO_PASSWORD` to a unique password in `.env`, then run
 poetry run python -m scripts.seed_demo
 ```
 
-This creates the `demo` user, two sites, six meters, tariffs and seven days of readings. Seeding leaves an existing database with users unchanged. `SEED_DEMO=1` optionally seeds during initialization; the default is off.
+This creates the `demo` user, two sites, six meters, tariffs and seven days of readings. Seeding leaves an existing database with users unchanged. Migrations, API startup, and the disposable initialization helper never seed automatically.
 
 ## Current architecture and features
 
@@ -71,7 +71,7 @@ Settings read process environment first, then `.env`. Real environment files, lo
 | `REDIS_URL` | Optional cache URL; blank disables API caching. Keep Redis private. |
 | `CACHE_TTL_SECONDS` | Positive default TTL, `60`; route-specific TTLs override it. |
 | `FRONTEND_ORIGINS` | JSON array of allowed origins; default `[]` (same-origin dashboard needs no CORS). |
-| `SEED_DEMO`, `DEMO_PASSWORD` | Opt-in seeding and chosen demo-user password. Never use a shared default password. |
+| `DEMO_PASSWORD` | Password used only by the explicit demo seed command. Never use a shared default password. |
 | `CELERY_BROKER_URL`, `CELERY_RESULT_BACKEND` | Worker Redis URLs; each falls back to `REDIS_URL`. |
 | `API_HOST`, `API_PORT` | Address used by task cache warmup. Set to the API service from a separate worker. |
 | `SENDGRID_API_KEY`, `SENDGRID_FROM_EMAIL`, `HEALTH_EMAIL_TO` | Optional health email; use a verified sender and a restricted key. |
@@ -84,13 +84,26 @@ Direct `uvicorn` commands set their bind address/port through CLI options. Telem
 
 ## Database setup
 
+Alembic owns the schema lifecycle for SQLite and PostgreSQL:
+
 ```bash
-poetry run python -m scripts.init_db
+poetry run alembic upgrade head
+poetry run alembic current
+poetry run alembic history
+poetry run alembic heads
+poetry run alembic check  # detect model changes without a migration
 ```
 
-Initialization creates missing tables with SQLAlchemy `create_all`, adds three legacy telemetry columns with direct `ALTER TABLE` statements when needed, and optionally seeds demo data. This remains suitable for local or disposable environments only. There is **no versioned migration framework**: `create_all` does not migrate arbitrary existing schemas.
+`scripts/init_db.py` remains an explicit `create_all` helper for a new disposable local SQLite database. It rejects PostgreSQL and does not evolve existing tables or seed data. Normal container startup performs no schema DDL.
 
-Before persistent PostgreSQL deployment, the hosted path will become Alembic migrations run by a dedicated migration Job, followed by API startup without DDL. That lifecycle is planned but not implemented.
+For a database created before Alembic, back it up and validate it before stamping:
+
+```bash
+poetry run python -m scripts.adopt_legacy_schema
+poetry run python -m scripts.adopt_legacy_schema --stamp
+```
+
+The first command is read-only. The second repeats validation and stamps `head` only when tables, columns, types, nullability, primary keys, expected unique constraints, indexes, and foreign keys match the baseline. An incompatible or unknown schema is not stamped.
 
 Sessions are scoped to requests, and short-lived background-task engines are disposed after use. Tariff reads eagerly load related sites. Most list endpoints are unpaginated and are intended for small demo datasets.
 
@@ -108,7 +121,8 @@ Use the returned token as `Authorization: Bearer <token>`. There is no public re
 
 | Endpoint | Access / behavior |
 | --- | --- |
-| `GET /api/health/z`, `/api/health/cachez` | Public process/cache status. Cache failure is reported in JSON with HTTP 200; these are not database readiness probes. |
+| `GET /api/health/z`, `/api/health/cachez` | Public process/cache status. Cache failure is reported in JSON with HTTP 200. |
+| `GET /api/health/readyz` | Database readiness. A bounded `SELECT 1` returns 200 when ready and 503 when unavailable; Redis is not a readiness dependency. |
 | `POST /api/auth/login`, `GET /api/auth/me` | Password login / authenticated user. |
 | `GET /api/sites/`, `/api/meters/`, `/api/meters/{id}` | Public site and meter data. |
 | `POST /api/meters/` | Authenticated meter creation. |
@@ -171,7 +185,9 @@ docker compose logs --tail=50 api worker
 docker compose down
 ```
 
-Compose starts PostgreSQL 16, Redis 7, the API, and a Celery worker with Beat. Ports bind to localhost. PostgreSQL has a named persistent volume and local-only development credentials. The worker waits for API initialization/health. Do not use these database defaults on a public host.
+Compose starts PostgreSQL 16, runs `alembic upgrade head` as a one-shot migration service, then starts Redis, the API, and a Celery worker with Beat. Ports bind to localhost. PostgreSQL has a named persistent volume and local-only development credentials. The worker waits for API health. Do not use these database defaults on a public host.
+
+An existing pre-Alembic Compose volume must be backed up, validated, and stamped with `scripts.adopt_legacy_schema` before the migration service can manage it. Do not delete an existing volume merely to bypass validation.
 
 For a standalone SQLite container:
 
@@ -203,7 +219,7 @@ SmartEnergy is intended for onboarding to the Cloud-Native Service Control Plane
 This project remains a demonstration application:
 
 - No rate limiting, token revocation, tenant isolation or durable HTTP task queue. Restrict deployment access and use HTTPS before handling non-demo data.
-- No full migration lifecycle, broad pagination or concurrency guarantees for scheduled aggregates/seeding. Run one Beat scheduler.
+- No zero-downtime multi-version migration guarantee, broad pagination or concurrency guarantees for scheduled aggregates/seeding. Run one Beat scheduler.
 - Celery has no `acks_late`, worker-lost rejection, explicit retry or prefetch policy, or task time limits. It does not claim exactly-once or guaranteed delivery.
 - The snapshot task supports local SQLite file copies only; it is not a consistent online-backup solution and does not back up PostgreSQL. Configure provider backups separately.
 - Health/system metrics are public, and metrics persistence failures can be tolerated silently. Do not treat them as an availability guarantee.

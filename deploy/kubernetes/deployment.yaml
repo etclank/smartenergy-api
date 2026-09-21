@@ -4,7 +4,8 @@ metadata:
   name: smartenergy-api
 spec:
   replicas: 1
-  # Initialization uses create_all, not a concurrent/versioned migration system.
+  # Starter remains single-replica/Recreate; the future production package will
+  # run Alembic in a separate migration step before application rollout.
   strategy:
     type: Recreate
   selector:

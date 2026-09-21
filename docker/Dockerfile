@@ -71,9 +71,8 @@ EXPOSE 8000
 # -----------------------------
 # Entrypoint
 # -----------------------------
-# Default entrypoint runs prestart.sh which:
-#  - Runs lightweight DB init (create_all + seed)
-#  - Starts Uvicorn
+# Default entrypoint runs prestart.sh, which starts Uvicorn without changing
+# the database schema. Run Alembic as a separate deployment step.
 #
 # Celery worker service overrides this in docker-compose:
 #   command: celery -A app.tasks.worker worker -B --loglevel=info
