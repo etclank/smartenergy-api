@@ -27,7 +27,7 @@ poetry run python -m scripts.seed_demo
 
 This creates the `demo` user, two sites, six meters, tariffs and seven days of readings. Seeding leaves an existing database with users unchanged. `SEED_DEMO=1` optionally seeds during initialization; the default is off.
 
-## Architecture and features
+## Current architecture and features
 
 ```mermaid
 flowchart LR
@@ -44,6 +44,8 @@ flowchart LR
     Worker --> Cache
 ```
 
+This diagram describes the application today. The local Compose stack runs PostgreSQL 16, Redis 7, the API, and one Celery worker that also runs Beat. Direct HTTP task requests still use FastAPI `BackgroundTasks` inside the API process.
+
 - Python 3.13, FastAPI, Pydantic, SQLAlchemy 2, asyncpg/PostgreSQL and aiosqlite/SQLite; versions resolved in `poetry.lock`.
 - Sites, meters, tariffs, imported/exported/reactive energy, maximum power and daily site summaries.
 - Public read endpoints for the dashboard; password-verified JWT login for meter creation and operational tasks.
@@ -54,6 +56,8 @@ flowchart LR
 `app/api/` contains routes and schemas, `app/models/` the database mappings, `app/core/` configuration and infrastructure, and `app/tasks/` background work. `scripts/` contains database initialization and seeding; `site/` contains the static dashboard. Tests live in `tests/`.
 
 HTTP task endpoints use FastAPI `BackgroundTasks` in the API process. They do **not** enqueue Celery messages. Celery Beat separately schedules the same task implementations. A `202` response confirms scheduling, not successful completion.
+
+The planned hosted architecture separates the API, Celery worker, and the single Celery Beat scheduler. It also adds a migration Job, backup CronJob, PostgreSQL and Redis StatefulSets, and a private Prometheus listener on TCP 9090. These are approved design targets, not current behavior. See the [architecture and deployment decisions](docs/architecture-deployment-decisions.md) for the stable design record.
 
 ## Configuration
 
@@ -84,7 +88,9 @@ Direct `uvicorn` commands set their bind address/port through CLI options. Telem
 poetry run python -m scripts.init_db
 ```
 
-Initialization creates missing tables with SQLAlchemy `create_all` and adds three legacy telemetry columns if absent. It supports SQLite and PostgreSQL. There is **no versioned migration framework**: `create_all` does not migrate arbitrary existing schemas. Review schema changes and back up persistent data before upgrades.
+Initialization creates missing tables with SQLAlchemy `create_all`, adds three legacy telemetry columns with direct `ALTER TABLE` statements when needed, and optionally seeds demo data. This remains suitable for local or disposable environments only. There is **no versioned migration framework**: `create_all` does not migrate arbitrary existing schemas.
+
+Before persistent PostgreSQL deployment, the hosted path will become Alembic migrations run by a dedicated migration Job, followed by API startup without DDL. That lifecycle is planned but not implemented.
 
 Sessions are scoped to requests, and short-lived background-task engines are disposed after use. Tariff reads eagerly load related sites. Most list endpoints are unpaginated and are intended for small demo datasets.
 
@@ -182,12 +188,15 @@ The image runs as a non-root user. SQLite data, logs, Beat state and file snapsh
 The same image can run on a Docker VM or a Kubernetes cluster. The dashboard is served by the API; it does not need a separate frontend deployment.
 
 - [Deployment guide](docs/deployment.md): image delivery, private dependencies, secrets, TLS, validation and rollback.
+- [Architecture decisions](docs/architecture-deployment-decisions.md): approved hosted design and conditions for revisiting it.
 - [`deploy/compose.vm.yml`](deploy/compose.vm.yml): runtime-only VM configuration with an optional worker profile, a read-only filesystem and localhost HTTP binding.
-- [`deploy/kubernetes/`](deploy/kubernetes/): Kustomize starter for one API replica and a private ClusterIP Service. Supply an image digest, runtime Secret, registry access and environment-specific networking through a reviewed overlay.
+- [`deploy/kubernetes/`](deploy/kubernetes/): current Kustomize starter for one API replica and a private ClusterIP Service. It is not the final production package.
+- `deploy/kubernetes/overlays/production`: planned production overlay path; it does not exist yet.
+- [Limitations](#limitations): current application and reliability boundaries.
 
 PostgreSQL and Redis are provisioned separately; these runtime examples do not create database storage or backups. The existing root `docker-compose.yml` remains the local development stack.
 
-SmartEnergy is intended for onboarding to the Cloud-Native Service Control Plane through its GitOps/Kustomize application route. It is **not currently deployed there** and is not supported by the operator's fixed `demo-http` ManagedService template. Review capacity and data persistence before adding it to the small single-node cluster. The starter does not enable OTLP export or add Prometheus targets.
+SmartEnergy is intended for onboarding to the Cloud-Native Service Control Plane through its GitOps/Kustomize application route. The platform already reserves the `smartenergy` namespace and AppProject, but `Application/smartenergy` does not exist and no SmartEnergy workload is deployed. Review capacity and data persistence before adding it to the small single-node cluster. The starter does not enable OTLP export or add Prometheus targets.
 
 ## Limitations
 
@@ -195,12 +204,15 @@ This project remains a demonstration application:
 
 - No rate limiting, token revocation, tenant isolation or durable HTTP task queue. Restrict deployment access and use HTTPS before handling non-demo data.
 - No full migration lifecycle, broad pagination or concurrency guarantees for scheduled aggregates/seeding. Run one Beat scheduler.
+- Celery has no `acks_late`, worker-lost rejection, explicit retry or prefetch policy, or task time limits. It does not claim exactly-once or guaranteed delivery.
 - The snapshot task supports local SQLite file copies only; it is not a consistent online-backup solution and does not back up PostgreSQL. Configure provider backups separately.
 - Health/system metrics are public, and metrics persistence failures can be tolerated silently. Do not treat them as an availability guarantee.
 - Some tests share fixture data; deprecation warnings remain in the existing date/time and client code. Managed-service integration and load testing are outside the unit suite.
 - Dependencies are locked for reproducibility; that is not a vulnerability-free guarantee. Update and audit them before deployment.
 
 Keep runtime credentials outside Git and container images. Use private database/cache access, rotate credentials through the deployment environment, and keep registry credentials scoped to image pulls.
+
+The editable database diagram sources are [`docs/db-diagram.drawio`](docs/db-diagram.drawio) and [`docs/db-diagram.xml`](docs/db-diagram.xml). Both are retained because the repository does not identify either distinct representation as generated or obsolete.
 
 ## License
 

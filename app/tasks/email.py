@@ -27,7 +27,7 @@ async def send_health_email() -> dict:
     subject = f"SmartEnergy API Health Report — {datetime.utcnow():%Y-%m-%d %H:%M UTC}"
     body = (
         f"Environment: {settings.env}\n"
-        f"Version: stage-2.4\n\n"
+        f"Version: 0.1.0\n\n"
         f"DB latency: {metrics['db_latency_ms']} ms\n"
         f"Redis latency: {metrics['redis_latency_ms']} ms\n\n"
         f"Row counts:\n"

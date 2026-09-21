@@ -9,7 +9,7 @@ from .energy_exported import EnergyExported
 from .energy_reactive import EnergyReactive
 from .max_power import MaxPower
 
-# New models (Stage 2.4)
+# Derived and operational models
 from .summary_kpi import SummaryKPI
 from .system_metrics import SystemMetrics
 from .summary_event import SummaryEvent

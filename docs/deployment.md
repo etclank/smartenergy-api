@@ -1,145 +1,218 @@
 # Deploying SmartEnergy
 
-SmartEnergy runs from one container image. The FastAPI process also serves `/site/`; PostgreSQL stores application data and Redis provides optional response caching and the Celery broker. This repository includes local development Compose, a VM runtime Compose file, and a Kubernetes API starter. None represents a live deployment.
+SmartEnergy is not deployed to the Cloud-Native Service Control Plane. This document separates the repository's current deployment helpers from the approved hosted design. The design provides production-like deployment controls for a portfolio application while remaining deliberately single-node and non-HA.
+
+The [architecture decision record](architecture-deployment-decisions.md) is the stable reference for the approved choices. The root [README](../README.md) remains the application and local-development guide.
+
+## Current deployment assets
+
+The repository currently provides:
+
+- a local Compose stack with PostgreSQL 16, Redis 7, the API, and a Celery worker that also runs Beat;
+- a runtime-only VM Compose file with an optional combined worker/Beat service;
+- one application image used by the API and worker;
+- a Kubernetes starter containing one API Deployment and ClusterIP Service;
+- CI validation that builds, but does not publish, the image.
+
+[`deploy/kubernetes/`](../deploy/kubernetes/) is a starter. It is not a complete production package and does not contain PostgreSQL, Redis, worker, Beat, migrations, backups, ingress, certificates, middleware, or NetworkPolicies. It will later evolve into a base and `deploy/kubernetes/overlays/production` structure. No files have been moved yet.
+
+## Project 1 hosting contract
+
+The completed platform contract reserves:
+
+| Item | Value |
+| --- | --- |
+| Namespace | `smartenergy` |
+| Argo CD AppProject | `smartenergy` |
+| Public host | `energy.platform.eoghanclancy.eu` |
+| Delivery | Manual Argo sync |
+| Source revision | Full Git commit pin |
+| Image reference | Immutable registry digest |
+
+`Application/smartenergy` does not exist. No SmartEnergy workload is deployed. The application repository will own its production Kustomize package and namespaced runtime resources; Project 1 will later add the Argo Application and private Prometheus integration.
+
+The intended image is public `ghcr.io/etclank/smartenergy-api`, published with a full commit-SHA tag and deployed by digest. Current CI does not publish this package.
+
+Runtime Secret values remain outside Git. At minimum, the hosted application will require a private PostgreSQL `DATABASE_URL`, a newly generated `JWT_SECRET` of at least 32 characters, and authenticated Redis URLs for cache, broker, and result roles. Automatic seeding and OpenTelemetry export remain disabled initially. The application repository may reference a Secret by name but does not own its values.
+
+## Current and target runtime roles
+
+The current local and VM Compose worker runs Beat in the same process. Do not scale that combined service because doing so would create multiple schedulers.
+
+The hosted design will use:
+
+| Role | Responsibility |
+| --- | --- |
+| API Deployment | FastAPI, dashboard, public HTTP on TCP 8000 |
+| Worker Deployment | Celery task execution, concurrency 1 initially |
+| Beat Deployment | Exactly one scheduler with an independent lifecycle |
+| Migration Job | Versioned schema upgrades before application rollout |
+| Backup CronJob | Daily PostgreSQL logical backup and off-node upload |
+
+Separating Beat gives the scheduler an independent lifecycle and resource budget and reduces duplicate-scheduling risk.
+
+## Schema lifecycle
+
+Today the API startup script runs SQLAlchemy `create_all`, conditionally issues direct `ALTER TABLE` statements for legacy telemetry columns, and can optionally seed demo data. That behavior remains available for local and disposable environments, but it is not safe enough for persistent hosted PostgreSQL.
+
+The hosted lifecycle will be:
+
+```text
+Alembic revision in the repository
+→ dedicated migration Job runs `alembic upgrade head`
+→ API, worker, and Beat start without schema DDL
+```
+
+Alembic and the Job are not implemented yet. Schema changes should remain compatible with the previous application release so an image rollback remains possible after a successful migration.
+
+## Health and metrics contract
+
+Current `/api/health/z` reports process and Redis state but always returns HTTP 200 and does not query PostgreSQL. `/api/health/cachez` is also informational. They do not yet satisfy the hosted readiness contract.
+
+The hosted probes will use:
+
+- liveness: process health;
+- readiness: a bounded PostgreSQL `SELECT 1`, returning HTTP 503 on failure;
+- Redis: informational health only, because API reads fall back to PostgreSQL.
+
+Application HTTP will remain on TCP 8000. Prometheus metrics will move from the current `/api/metrics` route to a private TCP 9090 listener. The current route must not be publicly exposed during hosted deployment.
+
+## Logging and writable paths
+
+Local development may retain Loguru file output. Kubernetes will use structured JSON on stdout/stderr and will not persist `/app/logs`. API, worker, Beat, and migration processes will use a read-only root filesystem with a bounded writable `/tmp` where needed.
+
+PostgreSQL and Redis require their own persistent data mounts. The exact image UIDs, security contexts, and writable paths must be validated under the platform's restricted Pod Security Admission policy before live deployment.
+
+## PostgreSQL and Redis targets
+
+The PostgreSQL target is version 16, one StatefulSet replica, and an approximately 5 GiB `local-path` PVC. It is intentionally non-HA. The exact digest-pinned image and security context remain subject to restricted-PSA testing on a fresh volume.
+
+One authenticated Redis 7 instance will minimize resource use. It will use one StatefulSet replica, AOF persistence, an approximately 1 GiB `local-path` PVC, and these logical databases:
+
+| Logical database | Responsibility |
+| --- | --- |
+| DB 0 | API response cache |
+| DB 1 | Celery broker |
+| DB 2 | Celery result backend |
+
+This is also intentionally non-HA. Redis loss degrades API caching but affects Celery delivery and result handling more directly.
+
+## Backup and restore
+
+The current task only copies local SQLite files. For PostgreSQL it returns `skip`; it is not a PostgreSQL backup.
+
+The hosted backup contract is:
+
+- `pg_dump -Fc` daily;
+- upload to off-node storage;
+- retain seven daily and four weekly recovery points;
+- use `concurrencyPolicy: Forbid`;
+- report failures through Kubernetes Job status;
+- validate `pg_restore` into a disposable database before closeout.
+
+The destination, credentials, compatible PostgreSQL client image, CronJob, and restore runbook will be implemented later.
+
+## Public exposure target
+
+The initial hosted public surface will contain:
+
+- `/` and `/site/`;
+- login at `/api/auth/login`;
+- intended demo-data read APIs;
+- a minimal health endpoint.
+
+The following will be private or disabled initially:
+
+- Prometheus metrics;
+- recorded system metrics;
+- Swagger UI;
+- ReDoc;
+- OpenAPI JSON.
+
+This is target deployment behavior. The current application still serves metrics, system metrics, Swagger, ReDoc, and OpenAPI on the main HTTP listener. Later application and ingress work will enforce the approved boundary.
+
+## Celery reliability and schedule policy
+
+The current Celery configuration has no `acks_late`, worker-lost rejection, explicit retry policy, prefetch policy, or task time limits. HTTP task endpoints currently use FastAPI `BackgroundTasks` rather than publishing Celery messages. A `202` therefore confirms local scheduling only. The system does not claim exactly-once or guaranteed delivery.
+
+A later stage will move operational HTTP work that promises durable execution to Celery and return a task identifier. It will still document at-least-once and loss/duplication boundaries rather than claiming exactly-once semantics.
+
+The initial hosted Beat policy will review only these candidates for enablement:
+
+- KPI refresh;
+- system metrics recording;
+- cache cleanup.
+
+These schedules will remain disabled initially:
+
+- demo generation;
+- demo cleanup;
+- health email;
+- API cache warmup;
+- obsolete SQLite backup.
+
+The existing code schedule remains unchanged until that review is implemented.
 
 ## Image delivery
 
-Run the existing tests and build the image from the repository root. Use a registry you control; the following commands are a delivery example, not an automatic publication workflow:
+The current manual example remains useful before CI publication exists:
 
 ```bash
-IMAGE=ghcr.io/YOUR_OWNER/smartenergy-api
+IMAGE=ghcr.io/etclank/smartenergy-api
 REVISION=$(git rev-parse HEAD)
 docker build -f docker/Dockerfile \
   --label org.opencontainers.image.revision="$REVISION" \
   -t "$IMAGE:$REVISION" .
-# Authenticate to the registry using its approved credential flow first.
 docker push "$IMAGE:$REVISION"
 docker buildx imagetools inspect "$IMAGE:$REVISION"
 ```
 
-Record the registry digest and deploy `ghcr.io/YOUR_OWNER/smartenergy-api@sha256:...`. Keep the previous digest for rollback. The current CI validates builds but does not publish packages. For the control plane, add image publication through its reviewed immutable delivery process and use namespace-scoped, read-only registry credentials. Match the image architecture to the target node (the target control-plane VM is x86-64).
-
-## Runtime requirements
-
-- Set `DATABASE_URL` to a private `postgresql+asyncpg://...` connection. URL-encode reserved characters in credentials. Use the database provider's required TLS configuration when connecting across a network.
-- Set a newly generated `JWT_SECRET` with at least 32 characters. The application's JWT secret is separate from the control-plane API bearer token.
-- Set `REDIS_URL` for caching. The optional worker also requires `CELERY_BROKER_URL` and `CELERY_RESULT_BACKEND`, or uses `REDIS_URL` for both. Keep broker/result/cache databases distinct where supported; a managed Redis service must support Celery's required commands and connections.
-- Leave `SEED_DEMO=0`. Database initialization creates missing tables on API startup. It is not a versioned migration tool. Back up persistent data before schema changes.
-- Keep `ENABLE_TELEMETRY=0` until Collector routing, allowed workload identity and exporter configuration have been reviewed.
-- The image runs as UID/GID 10001 and needs writable `/tmp` and `/app/logs`. The examples provide ephemeral storage for these paths; stdout remains available to the container runtime. They require PostgreSQL, not a SQLite database in the read-only application directory.
-
-The examples do not provision PostgreSQL, Redis, persistent data volumes, database backups, DNS or certificates. Decide where the stateful services live and verify backup restoration before deployment. A local-path volume on a single K3s node is not redundant storage.
+Record the registry digest and use `ghcr.io/etclank/smartenergy-api@sha256:...` in the production overlay. The planned CI path will use a digest-pinned multi-stage application image; the current Dockerfile remains unchanged.
 
 ## Docker on a VM
 
-Use [`deploy/compose.vm.yml`](../deploy/compose.vm.yml), not the root development Compose file. It starts only the API by default, uses an existing image, and does not expose database/cache ports.
+Use [`deploy/compose.vm.yml`](../deploy/compose.vm.yml), not the root development stack:
 
 ```bash
 cp deploy/vm.env.example .env.vm
 chmod 600 .env.vm
-# Edit .env.vm: set the published image digest, private DB URL and JWT secret.
 docker compose --env-file .env.vm -f deploy/compose.vm.yml config --quiet
 docker compose --env-file .env.vm -f deploy/compose.vm.yml pull
 docker compose --env-file .env.vm -f deploy/compose.vm.yml up -d
-docker compose --env-file .env.vm -f deploy/compose.vm.yml ps
 curl --fail http://127.0.0.1:8000/api/health/z
 ```
 
-`.env.vm` is ignored by Git and excluded from image builds. Avoid printing expanded Compose configuration because it contains secrets. Private service addresses must be reachable from the container network: `localhost` inside the container is not the VM host or a separate database container.
+The API binds to localhost. A reviewed TLS reverse proxy must preserve application paths. The optional worker profile still combines worker and Beat, uses concurrency 1, and must remain a single instance.
 
-The API binds to `127.0.0.1:8000` on the host. Put the VM's reviewed TLS reverse proxy in front of it, proxying the original paths (`/api`, `/site`, `/docs`, `/redoc`) without stripping prefixes. Only expose approved HTTPS routes; keep port 8000 private. Apply authentication/rate limits at the proxy as needed. The dashboard uses same-origin `/api`, so separate CORS configuration is unnecessary in this arrangement.
-
-After checking capacity and configuring Redis, enable the worker explicitly:
+Enable that current combined process only when its schedule has been reviewed:
 
 ```bash
 docker compose --env-file .env.vm -f deploy/compose.vm.yml --profile worker up -d
 ```
 
-The worker uses concurrency 1 and a single Beat scheduler. Do not scale this combined worker/Beat service. Its Beat schedule file is ephemeral, so restarts can alter scheduling timing. Default scheduled jobs include generating/cleaning synthetic readings; review those jobs before using any non-demo dataset. The PostgreSQL backup task returns `skip`; use real database backups separately. Optional SendGrid settings are not needed to run the API.
+## Kubernetes implementation path
 
-Both services have initial 0.5 CPU / 512 MiB limits. These are starting budgets, not measured capacity guarantees. Host stdout logs are rotated; temporary application logs are discarded with the container. `up -d` recreates services when the configured image changes, with downtime possible for the single replica.
+The future package will use:
 
-To roll back, restore the previous digest in `.env.vm`, pull it and rerun `up -d`. An application rollback does not undo schema or data changes. Stop the runtime with `down`; it owns no database volume to delete.
-
-## Kubernetes and the Cloud-Native Service Control Plane
-
-The Cloud-Native Service Control Plane operator currently accepts only the `demo-http` ManagedService template. Use its documented **GitOps/Kustomize application onboarding path** for SmartEnergy. Do not submit a SmartEnergy image to the existing lifecycle API or edit operator-owned Deployments.
-
-[`deploy/kubernetes/`](../deploy/kubernetes/) contains a one-replica Deployment and ClusterIP Service. It does not install a namespace, Secret, registry credential, Ingress, NetworkPolicy, worker or stateful service. The placeholder image deliberately requires replacement in an environment overlay.
-
-Before onboarding to the 2-vCPU / 4-GB single-node platform, remeasure CPU, memory and disk use. Its published utilization is historical evidence, not a current capacity budget. Account for PostgreSQL, Redis, the optional worker and backups in addition to the API. Start with the API and separately provisioned dependencies; resize or defer if capacity is insufficient.
-
-An environment overlay should contain:
-
-1. The approved namespace and immutable image digest.
-2. An `imagePullSecrets` reference to a pull-only registry Secret in that namespace.
-3. A `smartenergy-runtime` Secret provisioned outside Git with `DATABASE_URL`, `JWT_SECRET`, and optional `REDIS_URL`/CORS settings. Explicit container environment entries keep production mode, seeding off and OTLP off.
-4. Reviewed NetworkPolicies for ingress from the selected ingress controller, egress to DNS and the exact database/cache endpoints, plus any explicitly enabled email/telemetry destinations. The base defines no network isolation by itself.
-5. A Traefik Ingress, hostname and cert-manager certificate using the platform's existing conventions. Initially validate privately; add public ingress only after reviewing SmartEnergy's intentionally public read endpoints and shared operator privileges.
-6. Resource budgets and Argo CD project/repository permissions reviewed for this workload. Do not broaden existing AppProjects merely to bypass a denied sync.
-
-For example, an overlay at `deploy/overlays/production/kustomization.yaml` in a working copy could use the following shape. Replace all placeholders and provision referenced Secrets before use; this is not a ready-to-sync platform configuration:
-
-```yaml
-apiVersion: kustomize.config.k8s.io/v1beta1
-kind: Kustomization
-namespace: applications # use the namespace approved by your platform
-resources:
-  - ../../kubernetes
-images:
-  - name: smartenergy-api
-    newName: ghcr.io/YOUR_OWNER/smartenergy-api
-    newTag: ""
-    digest: sha256:REPLACE_WITH_PUBLISHED_DIGEST
-patches:
-  - target:
-      kind: Deployment
-      name: smartenergy-api
-    patch: |-
-      - op: add
-        path: /spec/template/spec/imagePullSecrets
-        value:
-          - name: smartenergy-registry
+```text
+deploy/kubernetes/
+  base/
+  overlays/
+    production/
 ```
 
-For platform GitOps, vendor the reviewed base and overlay into the application package, or pin a remote base to an immutable Git revision under the platform's dependency policy. Adapt relative paths to that package. Use its existing manual Argo CD sync and rollback process; do not point Argo at a mutable default branch without reviewing the intended revision.
+The production overlay will select the `smartenergy` namespace, public host, image digest, resources, storage, and exact ingress and policy configuration. It will not create the Namespace, ResourceQuota, AppProject, or Secret values owned outside the application repository.
 
-Render the supplied base locally without accessing a cluster:
+Until that structure exists, render only the starter:
 
 ```bash
 kubectl kustomize deploy/kubernetes
 ```
 
-After preparing the environment overlay, use the platform's private administrative access to validate it against the target API server before manual GitOps sync:
+Once implemented, validate the production overlay locally and with server-side dry-run in the approved cluster context before requesting manual Argo sync. Do not point Argo at a mutable branch or mutable image tag.
 
-```bash
-# Run only in the approved kubeconfig/context, with the reviewed overlay present.
-kubectl apply --dry-run=server -k deploy/overlays/production
-```
+## Capacity and rollout
 
-The Deployment uses `Recreate` and one replica because startup performs schema initialization. Expect rollout downtime. The read-only filesystem, non-root UID, dropped capabilities, disabled service-account token and RuntimeDefault seccomp match the intended platform security posture. Writable `emptyDir` volumes hold only temporary files and logs.
+The platform is a single approximately 4 GiB node. The first deployment will use one replica per role, worker concurrency 1, explicit resources, and no-surge application rollouts. PostgreSQL, Redis, API, worker, Beat, ingress, and metrics will be admitted incrementally with measurements after every checkpoint. A VM resize remains an evidence-based fallback.
 
-Startup and liveness probes check the HTTP listener. Readiness uses `/api/health/z`, which reports Redis state but returns 200 even when Redis is down and does not check PostgreSQL. It is a process-level readiness check, not proof of data-service availability. Validate database-backed endpoints separately; see Kubernetes' [probe behavior](https://kubernetes.io/docs/concepts/workloads/pods/probes/).
-
-After manual sync, verify the rollout and access the private Service:
-
-```bash
-kubectl -n applications rollout status deployment/smartenergy-api --timeout=180s
-kubectl -n applications port-forward service/smartenergy-api 18000:8000
-# In a second terminal:
-curl --fail http://127.0.0.1:18000/api/health/z
-curl --fail http://127.0.0.1:18000/api/sites/
-curl --fail http://127.0.0.1:18000/site/
-```
-
-Also verify rejected unauthenticated writes, login with an explicitly provisioned application user, database persistence across Pod recreation, Redis fallback and resource usage. There is no public registration endpoint. For an empty demonstration database, provision `DEMO_PASSWORD` privately and deliberately invoke `python -m scripts.seed_demo`; do not enable automatic seeding for ordinary rollouts.
-
-A Kubernetes worker is a separate later workload: reuse the image with explicit Celery arguments, concurrency/resource budgets, private broker credentials and writable scheduler state, and run exactly one Beat scheduler. HTTP task endpoints still run in-process even when no worker is deployed. The current base intentionally deploys only the API/dashboard.
-
-## Observability and rollback
-
-The control-plane Collector currently admits reviewed identities and uses a nop exporter; workload OTLP export is outside its accepted baseline. Keep SmartEnergy OTLP disabled until that design changes. `/api/metrics` can be scraped privately only after explicitly extending the platform's bounded Prometheus target configuration and network access. Do not add public metrics ingress by default.
-
-Revert the environment overlay to the previous image digest and use the platform's manual sync process to roll back. Confirm schema compatibility first. Keep database backup/restore and credential rotation procedures separate from application-image rollback. Do not treat deleting Kubernetes resources or replacing a Pod as a data-recovery procedure.
-
-References: [Kustomize overlays](https://kubernetes.io/docs/tasks/manage-kubernetes-objects/kustomization/) and [Compose profiles](https://docs.docker.com/compose/how-tos/profiles/).
+This architecture provides production-like deployment controls and operational evidence. It does not claim high availability, fault tolerance across nodes, or production service-level objectives.

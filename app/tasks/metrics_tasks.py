@@ -140,7 +140,7 @@ async def update_meta_cache() -> dict:
         "env": settings.env,
         "db": "up",
         "cache": "up",
-        "version": "stage-2.4",
+        "version": "0.1.0",
         "last_seeded_at": datetime.utcnow().isoformat(),
     }
 
