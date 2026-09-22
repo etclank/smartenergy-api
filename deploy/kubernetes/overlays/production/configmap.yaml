@@ -1,0 +1,19 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: smartenergy-config
+  labels:
+    app.kubernetes.io/name: smartenergy
+    app.kubernetes.io/part-of: smartenergy
+data:
+  ENV: prod
+  LOG_LEVEL: INFO
+  PORT: "8000"
+  JWT_ALG: HS256
+  JWT_EXPIRE_MINUTES: "60"
+  CACHE_TTL_SECONDS: "60"
+  SEED_DEMO: "0"
+  ENABLE_TELEMETRY: "0"
+  ENABLE_API_DOCS: "0"
+  METRICS_HOST: 0.0.0.0
+  METRICS_PORT: "9090"

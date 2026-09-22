@@ -57,7 +57,7 @@ This diagram describes the application today. The local Compose stack runs Postg
 
 Durable HTTP task endpoints enqueue Celery messages and return a task ID. A `202` means accepted by the broker, not completed. Explicit cache warmup remains best-effort work in the API process. Database migration, demo seeding and PostgreSQL backup are not task API operations.
 
-The runtime now separates the API, concurrency-1 Celery worker, and single Celery Beat scheduler. The later production package will add the migration Job, backup CronJob, PostgreSQL and Redis StatefulSets. See the [architecture and deployment decisions](docs/architecture-deployment-decisions.md) for the stable design record.
+The runtime separates the API, concurrency-1 Celery worker, and single Celery Beat scheduler. The production Kustomize package also defines a release migration Job; PostgreSQL, Redis, and backup resources remain Stage 5 work. See the [architecture and deployment decisions](docs/architecture-deployment-decisions.md) for the stable design record.
 
 ## Configuration
 
@@ -75,6 +75,7 @@ Settings read process environment first, then `.env`. Real environment files, lo
 | `CELERY_BROKER_URL`, `CELERY_RESULT_BACKEND` | Worker Redis URLs; each falls back to `REDIS_URL`. |
 | `API_HOST`, `API_PORT` | Address used by explicit best-effort cache warmup. |
 | `METRICS_HOST`, `METRICS_PORT` | Private Prometheus listener, `0.0.0.0:9090`. |
+| `ENABLE_API_DOCS` | Enables Swagger, ReDoc, and OpenAPI JSON; default `true`, set to `0` in the production overlay. |
 | `SENDGRID_API_KEY`, `SENDGRID_FROM_EMAIL`, `HEALTH_EMAIL_TO` | Optional health email; use a verified sender and a restricted key. |
 | `ENV` | Application environment, default `dev`. |
 | `PORT`, `ROLE` | Container startup: HTTP port (default `8000`) and `web`, `worker`, or `beat`. |
@@ -205,7 +206,7 @@ docker run --rm --name smartenergy-sqlite -p 127.0.0.1:8000:8000 \
 
 The digest-pinned multi-stage image runs as UID/GID 10001 and contains no compiler, Poetry, or PostgreSQL client. The same artifact runs the API, worker, Beat, and explicit Alembic migrations. In `ENV=prod`, all roles log structured JSON to stdout/stderr and create no log directory. Beat keeps non-authoritative schedule state under `/tmp`, so the hosted roles support a read-only root filesystem with writable temporary storage. Local SQLite data and manually requested SQLite snapshots remain development-only. `docker compose down` preserves PostgreSQL data; adding `-v` deletes it.
 
-After a successful `main` workflow, the publication reference is `ghcr.io/etclank/smartenergy-api:<full-40-character-sha>`. A later Kubernetes stage will consume `ghcr.io/etclank/smartenergy-api@sha256:<digest>`, using the digest recorded by CI rather than the tag. The workflow is ready to publish; this repository does not claim that an image exists until the remote workflow has run. The first package publication may require its GitHub Packages visibility to be changed to public manually.
+The approved Stage 3 publication is `ghcr.io/etclank/smartenergy-api:1cbe7dd0991b1495dfabdd08a69a00755c5961aa`, and the production package consumes it as `ghcr.io/etclank/smartenergy-api@sha256:7a35d14461bd6ee81bf67cf09bef792c866ad7673add9077e7b770e5fff99792`. The package is public and has registry SBOM and provenance attestations.
 
 ## VM and Kubernetes deployment
 
@@ -214,19 +215,19 @@ The same image can run on a Docker VM or a Kubernetes cluster. The dashboard is 
 - [Deployment guide](docs/deployment.md): image delivery, private dependencies, secrets, TLS, validation and rollback.
 - [Architecture decisions](docs/architecture-deployment-decisions.md): approved hosted design and conditions for revisiting it.
 - [`deploy/compose.vm.yml`](deploy/compose.vm.yml): runtime-only VM configuration with an optional worker profile, a read-only filesystem and localhost HTTP binding.
-- [`deploy/kubernetes/`](deploy/kubernetes/): current Kustomize starter for one API replica and a private ClusterIP Service. It is not the final production package.
-- `deploy/kubernetes/overlays/production`: planned production overlay path; it does not exist yet.
+- [`deploy/kubernetes/base`](deploy/kubernetes/base): API, worker, Beat, migration, Service, and NetworkPolicy resources.
+- [`deploy/kubernetes/overlays/production`](deploy/kubernetes/overlays/production): digest-pinned production configuration, Ingress, Certificate, and Traefik middleware.
 - [Limitations](#limitations): current application and reliability boundaries.
 
 PostgreSQL and Redis are provisioned separately; these runtime examples do not create database storage or backups. The existing root `docker-compose.yml` remains the local development stack.
 
-SmartEnergy is intended for onboarding to the Cloud-Native Service Control Plane through its GitOps/Kustomize application route. CI can build and publish immutable SmartEnergy images to GHCR, but production Kubernetes packaging and deployment are not yet implemented. The platform already reserves the `smartenergy` namespace and AppProject, but `Application/smartenergy` does not exist and no SmartEnergy workload is deployed. Review capacity and data persistence before adding it to the small single-node cluster. The starter does not enable OTLP export or add Prometheus targets.
+SmartEnergy is ready for later onboarding to the Cloud-Native Service Control Plane through its GitOps/Kustomize application route. The application-owned production package is implemented, but PostgreSQL, Redis, backups, the Project 1 `Application/smartenergy`, DNS, and live deployment are still pending. No SmartEnergy workload is deployed. Render it with `kubectl kustomize deploy/kubernetes/overlays/production`.
 
 ## Limitations
 
 This project remains a demonstration application:
 
-- No rate limiting, token revocation or tenant isolation. Restrict deployment access and use HTTPS before handling non-demo data.
+- The production Ingress has a modest edge rate limit, but the application has no per-user rate limiting, token revocation, or tenant isolation.
 - No zero-downtime multi-version migration guarantee, broad pagination or concurrency guarantees for scheduled aggregates/seeding. Run one Beat scheduler.
 - Celery uses late acknowledgements, worker-lost rejection and prefetch 1. Delivery remains at-least-once-like and duplicate execution is possible; exactly-once is not claimed. Broad retries and arbitrary task time limits are intentionally absent.
 - The snapshot task supports local SQLite file copies only; it is not a consistent online-backup solution and does not back up PostgreSQL. Configure provider backups separately.

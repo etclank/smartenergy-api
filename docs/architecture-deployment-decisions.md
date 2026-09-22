@@ -1,6 +1,6 @@
 # Architecture and Deployment Decisions
 
-Status: approved design for the hosted SmartEnergy deployment. D1, D2, D3, D5, and D13 are implemented in application tooling; their production Kubernetes wiring remains future work. Unless a section says otherwise, the remaining decisions describe planned work.
+Status: approved design for the hosted SmartEnergy deployment. The stateless production Kubernetes package is implemented; stateful services, backups, Project 1 admission, and live deployment remain future work.
 
 ## D1 — Versioned schema lifecycle
 
@@ -76,8 +76,8 @@ Status: approved design for the hosted SmartEnergy deployment. D1, D2, D3, D5, a
 
 ## D10 — Initial public surface
 
-- **Decision:** Expose the dashboard, intended demo read APIs, login, and minimal health. Keep Prometheus metrics and system metrics private, and disable Swagger, ReDoc, and OpenAPI initially.
-- **Context:** Prometheus now uses its private listener; recorded system metrics and API documentation remain on the application listener pending the production HTTP-surface stage.
+- **Decision:** Expose the dashboard, intended demo read APIs, login, minimal health, and the system-metrics data currently required by the dashboard. Keep Prometheus metrics private, and disable Swagger, ReDoc, and OpenAPI initially.
+- **Context:** Prometheus uses its private listener, and the production overlay disables API documentation. Recorded system metrics remain public temporarily because the dashboard reads them.
 - **Reason:** The first hosted release should have a small, deliberate public boundary.
 - **Trade-off:** Interactive API documentation is not initially available as public portfolio evidence.
 - **Reconsider when:** The operational API has been reviewed and public documentation adds clear portfolio value.
@@ -93,7 +93,7 @@ Status: approved design for the hosted SmartEnergy deployment. D1, D2, D3, D5, a
 ## D12 — Public GHCR and immutable delivery
 
 - **Decision:** Publish a public GHCR image tagged with the full Git SHA and pin its digest in the production overlay.
-- **Context:** CI can publish a full-SHA-tagged GHCR image with digest metadata, SBOM, and provenance after all validation jobs pass. Package existence and public visibility still require the first remote run.
+- **Context:** GHCR contains the public full-SHA image for `1cbe7dd0991b1495dfabdd08a69a00755c5961aa`, with verified digest, SBOM, and provenance; the production overlay pins that digest.
 - **Reason:** Public pulls avoid registry credentials while the digest binds deployment to reviewed content.
 - **Trade-off:** The image is publicly downloadable.
 - **Reconsider when:** Image contents or repository policy require private distribution.

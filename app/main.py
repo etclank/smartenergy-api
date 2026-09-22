@@ -17,7 +17,7 @@ from app.core import telemetry
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import RedirectResponse
 from contextlib import asynccontextmanager
-from typing import AsyncIterator, Callable, Awaitable
+from typing import AsyncIterator, Callable, Awaitable, TypedDict
 from loguru import logger
 
 
@@ -40,7 +40,28 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 setup_logging("api")  # 🔹 initialize global logger
 
-app = FastAPI(title="SmartEnergy API", version="0.1.0", lifespan=lifespan)
+
+class DocumentationPaths(TypedDict):
+    docs_url: str | None
+    redoc_url: str | None
+    openapi_url: str | None
+
+
+def documentation_paths(enabled: bool) -> DocumentationPaths:
+    """Return FastAPI documentation routes for the selected environment."""
+    return {
+        "docs_url": "/docs" if enabled else None,
+        "redoc_url": "/redoc" if enabled else None,
+        "openapi_url": "/openapi.json" if enabled else None,
+    }
+
+
+app = FastAPI(
+    title="SmartEnergy API",
+    version="0.1.0",
+    lifespan=lifespan,
+    **documentation_paths(settings.enable_api_docs),
+)
 
 
 # ✅ Global metrics middleware

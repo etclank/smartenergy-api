@@ -1,0 +1,36 @@
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: redirect-https
+  labels:
+    app.kubernetes.io/name: smartenergy
+    app.kubernetes.io/part-of: smartenergy
+spec:
+  redirectScheme:
+    scheme: https
+    permanent: true
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: disable-api-docs
+  labels:
+    app.kubernetes.io/name: smartenergy
+    app.kubernetes.io/part-of: smartenergy
+spec:
+  replacePathRegex:
+    regex: ^/(docs|redoc|openapi\.json)(/.*)?$
+    replacement: /_documentation-disabled
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: rate-limit
+  labels:
+    app.kubernetes.io/name: smartenergy
+    app.kubernetes.io/part-of: smartenergy
+spec:
+  rateLimit:
+    average: 5
+    burst: 10
+    period: 1s

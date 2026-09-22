@@ -17,6 +17,9 @@ class Settings(BaseSettings):
     metrics_port: int = Field(
         default=9090, validation_alias=AliasChoices("METRICS_PORT")
     )
+    enable_api_docs: bool = Field(
+        default=True, validation_alias=AliasChoices("ENABLE_API_DOCS")
+    )
 
     # -------------------------------------------------------------------------
     # Database

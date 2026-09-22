@@ -11,10 +11,10 @@ The repository currently provides:
 - a local Compose stack with PostgreSQL 16, a one-shot Alembic migration service, Redis 7, the API, a concurrency-1 Celery worker, and a separate Beat scheduler;
 - a runtime-only VM Compose file with optional separate worker and Beat services;
 - one digest-pinned, multi-stage application image used by the API, worker, Beat, and migration command;
-- a Kubernetes starter containing one API Deployment and ClusterIP Service;
+- a production Kustomize package containing the API, worker, Beat, migration, private Service, network boundaries, Ingress, TLS Certificate, and middleware;
 - CI validation that can publish a full-SHA-tagged GHCR image with digest metadata, SBOM, and provenance after all quality gates pass.
 
-[`deploy/kubernetes/`](../deploy/kubernetes/) is a starter. It is not a complete production package and does not contain PostgreSQL, Redis, worker, Beat, migrations, backups, ingress, certificates, middleware, or NetworkPolicies. It will later evolve into a base and `deploy/kubernetes/overlays/production` structure. No files have been moved yet.
+[`deploy/kubernetes/overlays/production`](../deploy/kubernetes/overlays/production/) is the application-owned production package. Stage 5 will add PostgreSQL, Redis, persistent storage, and backups. Project 1 still owns the Namespace, ResourceQuota, AppProject, and eventual Argo CD Application.
 
 ## Project 1 hosting contract
 
@@ -31,7 +31,7 @@ The completed platform contract reserves:
 
 `Application/smartenergy` does not exist. No SmartEnergy workload is deployed. The application repository will own its production Kustomize package and namespaced runtime resources; Project 1 will later add the Argo Application and private Prometheus integration.
 
-The intended image is public `ghcr.io/etclank/smartenergy-api`, published with a full commit-SHA tag and deployed by digest. The workflow is configured to publish on successful pushes to `main`; actual package existence remains unverified until that workflow runs remotely.
+The verified public image tag is `ghcr.io/etclank/smartenergy-api:1cbe7dd0991b1495dfabdd08a69a00755c5961aa`. The production overlay pins registry digest `sha256:7a35d14461bd6ee81bf67cf09bef792c866ad7673add9077e7b770e5fff99792`. Its SPDX SBOM and SLSA provenance are attached in GHCR.
 
 Runtime Secret values remain outside Git. At minimum, the hosted application will require a private PostgreSQL `DATABASE_URL`, a newly generated `JWT_SECRET` of at least 32 characters, and authenticated Redis URLs for cache, broker, and result roles. Automatic seeding and OpenTelemetry export remain disabled initially. The application repository may reference a Secret by name but does not own its values.
 
@@ -63,7 +63,7 @@ database available
 → API, worker, and Beat start without schema DDL
 ```
 
-The migration command is implemented. Its future Kubernetes Job is not. Useful inspection and drift commands are:
+The migration command and application-owned Kubernetes Job are implemented. Useful inspection and drift commands are:
 
 ```bash
 poetry run alembic current
@@ -139,15 +139,14 @@ The initial hosted public surface will contain:
 - intended demo-data read APIs;
 - a minimal health endpoint.
 
-The following will be private or disabled initially:
+The following are private or disabled in the production overlay:
 
 - Prometheus metrics;
-- recorded system metrics;
 - Swagger UI;
 - ReDoc;
 - OpenAPI JSON.
 
-Prometheus metrics are now separated onto TCP 9090. Recorded system metrics remain public because the current dashboard reads them; changing that contract is deferred to a later API/security stage. Swagger, ReDoc, and OpenAPI also remain enabled until the production HTTP surface is implemented and tested.
+Prometheus metrics are separated onto TCP 9090 and are not routed through Ingress. Recorded system metrics remain public temporarily because the dashboard reads `/api/system_metrics/latest`; changing that contract is deferred to a later API/security stage. `ENABLE_API_DOCS=0` disables Swagger, ReDoc, and OpenAPI JSON in production while local development retains them. The Ingress also rewrites those documentation paths to a non-existent route. This closes the public paths for the pinned Stage 3 artifact while the application flag enters the next published image.
 
 ## Celery reliability and schedule policy
 
@@ -199,7 +198,7 @@ docker build -f docker/Dockerfile \
 
 On a push to `main`, CI runs application and integration tests, builds and smoke-tests the runtime image, then publishes exactly `ghcr.io/etclank/smartenergy-api:<full-40-character-sha>`. It records the registry `sha256:...` as a job output, workflow summary, and `image-metadata-<sha>` artifact. Buildx also attaches an SBOM and maximum-mode provenance to the registry image. These attestations provide traceability; no admission policy currently enforces them.
 
-Record the registry digest and use `ghcr.io/etclank/smartenergy-api@sha256:...` in the future production overlay. GitHub may create the first GHCR package as private; if so, a repository owner must change the package visibility to public in GitHub Packages after the first successful publication. CI does not use a long-lived PAT and does not attempt to alter visibility.
+The current production reference is `ghcr.io/etclank/smartenergy-api@sha256:7a35d14461bd6ee81bf67cf09bef792c866ad7673add9077e7b770e5fff99792`. GHCR visibility is public, so no image pull Secret is required.
 
 The Python base is pinned as a readable tag plus multi-platform digest in `docker/Dockerfile`. To update it, inspect the current upstream manifest with `docker buildx imagetools inspect python:3.13-slim`, replace the verified digest in both the build argument and OCI base label, then rebuild and repeat the test and read-only smoke suites. Alembic uses the Python PostgreSQL drivers and does not need `psql`; the main image therefore omits `postgresql-client`. Stage 5 should use a separate digest-pinned PostgreSQL backup image for `pg_dump`.
 
@@ -226,9 +225,9 @@ Enable the worker and Beat processes with:
 docker compose --env-file .env.vm -f deploy/compose.vm.yml --profile worker up -d
 ```
 
-## Kubernetes implementation path
+## Production Kubernetes package
 
-The future package will use:
+The application-owned package is:
 
 ```text
 deploy/kubernetes/
@@ -237,15 +236,34 @@ deploy/kubernetes/
     production/
 ```
 
-The production overlay will select the `smartenergy` namespace, public host, image digest, resources, storage, and exact ingress and policy configuration. It will not create the Namespace, ResourceQuota, AppProject, or Secret values owned outside the application repository.
-
-Until that structure exists, render only the starter:
+The overlay selects namespace `smartenergy`, the verified application digest, and `energy.platform.eoghanclancy.eu`. It creates no Namespace, ResourceQuota, AppProject, RBAC, ServiceAccount, or Secret values. Render it with:
 
 ```bash
-kubectl kustomize deploy/kubernetes
+kubectl kustomize deploy/kubernetes/overlays/production
 ```
 
-Once implemented, validate the production overlay locally and with server-side dry-run in the approved cluster context before requesting manual Argo sync. Do not point Argo at a mutable branch or mutable image tag.
+Required external Secret contracts are:
+
+| Secret | Required keys |
+| --- | --- |
+| `smartenergy-runtime` | `JWT_SECRET` |
+| `smartenergy-postgres` | `DATABASE_URL` |
+| `smartenergy-redis` | `REDIS_URL`, `CELERY_BROKER_URL`, `CELERY_RESULT_BACKEND` |
+| `smartenergy-backup` | Reserved for Stage 5; contract not yet consumed |
+
+The API requests `50m/128Mi` and limits `250m/256Mi`; the worker requests `50m/128Mi` and limits `300m/256Mi`; Beat requests `10m/48Mi` and limits `50m/96Mi`; migration requests `25m/96Mi` and limits `150m/192Mi`. API uses a no-surge rollout, accepting single-replica downtime to limit temporary memory. Worker and singleton Beat use `Recreate`; a worker restart can redeliver work under late acknowledgements.
+
+Every Pod runs as UID/GID 10001 with RuntimeDefault seccomp, all capabilities dropped, privilege escalation disabled, service-account token automount disabled, a read-only root, and only a size-limited `/tmp` `emptyDir`. `/api/health/z` is startup/liveness; `/api/health/readyz` checks PostgreSQL readiness without making Redis a readiness dependency.
+
+The migration is an Argo CD `PreSync` hook with a fixed name, a source-revision annotation, and `BeforeHookCreation`. A failed migration blocks the sync and remains available for diagnosis. The next manually admitted release removes the previous Job immediately before creating its replacement, preventing permanent buildup while retaining evidence between releases.
+
+Default-deny ingress and egress apply to all package Pods. DNS is limited to CoreDNS UDP/TCP 53. Traefik may reach API TCP 8000, and Prometheus may reach metrics TCP 9090, using their exact platform identities. Application roles may reach only the stable Stage 5 PostgreSQL label on TCP 5432 and Redis label on TCP 6379. No unrestricted internet or TCP 443 egress exists; SendGrid and OTLP remain disabled.
+
+Ingress uses Traefik, permanent HTTPS redirect, documentation-path blocking, and rate limiting at five requests per second with a burst of ten. Cert-manager writes `smartenergy-tls` using the existing `letsencrypt-production` ClusterIssuer. These values match the current platform convention and keep metrics outside public routing.
+
+The rendered package fits the Project 1 quota including the reserved Stage 5 budget: steady state is `210m/1000m` CPU and `544Mi/1088Mi` memory; with migration it is `235m/1150m` and `640Mi/1280Mi`. Stage 5 must retain the tested label and resource reservation contracts.
+
+Do not apply this overlay directly. After Stage 5 validation, Project 1 will add a commit-pinned Argo Application and the Prometheus discovery edge, followed by manual sync. Live DNS also remains separate.
 
 ## Capacity and rollout
 

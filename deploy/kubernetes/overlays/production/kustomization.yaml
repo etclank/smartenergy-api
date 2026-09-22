@@ -1,0 +1,13 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: smartenergy
+resources:
+  - ../../base
+  - configmap.yaml
+  - ingress.yaml
+  - certificate.yaml
+  - middleware.yaml
+images:
+  - name: ghcr.io/etclank/smartenergy-api
+    newName: ghcr.io/etclank/smartenergy-api
+    digest: sha256:7a35d14461bd6ee81bf67cf09bef792c866ad7673add9077e7b770e5fff99792

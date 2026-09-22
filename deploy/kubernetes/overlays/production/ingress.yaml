@@ -1,0 +1,28 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: smartenergy
+  labels:
+    app.kubernetes.io/name: smartenergy
+    app.kubernetes.io/component: api
+    app.kubernetes.io/part-of: smartenergy
+  annotations:
+    traefik.ingress.kubernetes.io/router.entrypoints: web,websecure
+    traefik.ingress.kubernetes.io/router.middlewares: smartenergy-redirect-https@kubernetescrd,smartenergy-disable-api-docs@kubernetescrd,smartenergy-rate-limit@kubernetescrd
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts:
+        - energy.platform.eoghanclancy.eu
+      secretName: smartenergy-tls
+  rules:
+    - host: energy.platform.eoghanclancy.eu
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: smartenergy-api
+                port:
+                  name: http
