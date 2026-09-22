@@ -156,10 +156,14 @@ jobs:
             python -c 'import app.main; print("application import ok")'
           docker run "${runtime_args[@]}" smartenergy-api:ci alembic heads
           if docker run "${runtime_args[@]}" -e ROLE=unsupported smartenergy-api:ci \
-            2>&1 | tee /tmp/unsupported-role.log; then
+            > /tmp/unsupported-role.log 2>&1; then
             echo "unsupported ROLE unexpectedly succeeded" >&2
             exit 1
+          else
+            unsupported_status=$?
           fi
+          cat /tmp/unsupported-role.log
+          test "$unsupported_status" -eq 64
           grep -F "Unsupported ROLE: unsupported" /tmp/unsupported-role.log
 
   publish:
