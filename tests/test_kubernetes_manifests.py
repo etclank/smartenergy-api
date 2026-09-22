@@ -11,6 +11,9 @@ OVERLAY = ROOT / "deploy" / "kubernetes" / "overlays" / "production"
 RESTORE_JOB = ROOT / "deploy" / "kubernetes" / "operations" / "restore-job.yaml"
 IMAGE = (
     "ghcr.io/etclank/smartenergy-api@"
+    "sha256:b9ed2c1be78d707f234df14e08679204a5249def787d0b8e26f398cce41e415f"
+)
+OLD_IMAGE_DIGEST = (
     "sha256:7a35d14461bd6ee81bf67cf09bef792c866ad7673add9077e7b770e5fff99792"
 )
 POSTGRES_IMAGE = (
@@ -25,7 +28,8 @@ CURL_IMAGE = (
     "curlimages/curl:8.22.0@"
     "sha256:58adaa4e8dca9c988bae2aba4ab3434a0bb2da16bbe3f92dec39ec7785166777"
 )
-REVISION = "1cbe7dd0991b1495dfabdd08a69a00755c5961aa"
+IMAGE_SOURCE_REVISION = "3e39c1e66c15f276aeb88fa5c4d322ec301870e2"
+OLD_IMAGE_SOURCE_REVISION = "1cbe7dd0991b1495dfabdd08a69a00755c5961aa"
 
 
 @lru_cache
@@ -144,6 +148,8 @@ def test_all_application_roles_use_the_verified_digest() -> None:
     assert {container(workload)["image"] for workload in workloads} == {IMAGE}
     assert all("@sha256:" in container(workload)["image"] for workload in workloads)
     assert all(":latest" not in container(workload)["image"] for workload in workloads)
+    assert OLD_IMAGE_DIGEST not in rendered_text()
+    assert OLD_IMAGE_SOURCE_REVISION not in rendered_text()
 
 
 def test_every_production_container_uses_an_immutable_image() -> None:
@@ -448,7 +454,10 @@ def test_backup_cronjob_contract() -> None:
     dump, upload = all_containers(backup)
     assert dump["image"] == POSTGRES_IMAGE
     assert upload["image"] == CURL_IMAGE
+    dump_env = {entry["name"]: entry for entry in dump["env"]}
+    assert dump_env["IMAGE_SOURCE_REVISION"]["value"] == IMAGE_SOURCE_REVISION
     assert "pg_dump --format=custom" in dump["args"][0]
+    assert "${IMAGE_SOURCE_REVISION}" in dump["args"][0]
     assert "alembic_version" in dump["args"][0]
     assert "curl --config /tmp/curl.conf" in upload["args"][0]
     assert "fail-with-body" in upload["args"][0]
@@ -497,7 +506,10 @@ def test_migration_job_is_a_diagnosable_sync_hook() -> None:
     assert annotations["argocd.argoproj.io/hook"] == "Sync"
     assert annotations["argocd.argoproj.io/hook-delete-policy"] == "BeforeHookCreation"
     assert annotations["argocd.argoproj.io/sync-wave"] == "-1"
-    assert annotations["smartenergy.eoghanclancy.eu/revision"] == REVISION
+    assert (
+        annotations["smartenergy.eoghanclancy.eu/image-source-revision"]
+        == IMAGE_SOURCE_REVISION
+    )
     assert container(migration)["command"] == ["alembic", "upgrade", "head"]
     assert set(env_map(migration)) == {"DATABASE_URL"}
     assert migration["spec"]["backoffLimit"] == 2

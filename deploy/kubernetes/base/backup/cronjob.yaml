@@ -46,7 +46,7 @@ spec:
                   timestamp="$(date -u +%Y%m%dT%H%M%SZ)"
                   alembic_revision="$(psql -Atqc 'SELECT version_num FROM alembic_version LIMIT 1')"
                   test -n "$alembic_revision"
-                  object_key="smartenergy/$(date -u +%Y/%m/%d)/${timestamp}-${APPLICATION_REVISION}-${alembic_revision}.dump"
+                  object_key="smartenergy/$(date -u +%Y/%m/%d)/${timestamp}-${IMAGE_SOURCE_REVISION}-${alembic_revision}.dump"
                   dump_file="/backup/database.dump"
                   pg_dump --format=custom --file="$dump_file"
                   test -s "$dump_file"
@@ -71,8 +71,8 @@ spec:
                     secretKeyRef:
                       name: smartenergy-postgres
                       key: POSTGRES_PASSWORD
-                - name: APPLICATION_REVISION
-                  value: 1cbe7dd0991b1495dfabdd08a69a00755c5961aa
+                - name: IMAGE_SOURCE_REVISION
+                  value: 3e39c1e66c15f276aeb88fa5c4d322ec301870e2
               resources:
                 requests:
                   cpu: 25m

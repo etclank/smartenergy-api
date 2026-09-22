@@ -31,7 +31,7 @@ The completed platform contract reserves:
 
 `Application/smartenergy` does not exist. No SmartEnergy workload is deployed. The application repository will own its production Kustomize package and namespaced runtime resources; Project 1 will later add the Argo Application and private Prometheus integration.
 
-The verified public image tag is `ghcr.io/etclank/smartenergy-api:1cbe7dd0991b1495dfabdd08a69a00755c5961aa`. The production overlay pins registry digest `sha256:7a35d14461bd6ee81bf67cf09bef792c866ad7673add9077e7b770e5fff99792`. Its SPDX SBOM and SLSA provenance are attached in GHCR.
+The verified public image tag is `ghcr.io/etclank/smartenergy-api:3e39c1e66c15f276aeb88fa5c4d322ec301870e2`. The production overlay pins registry digest `sha256:b9ed2c1be78d707f234df14e08679204a5249def787d0b8e26f398cce41e415f`. Its SPDX SBOM and SLSA provenance are attached in GHCR. This image source revision is intentionally distinct from the later deployment revision containing the reviewed overlay.
 
 Runtime Secret values remain outside Git. At minimum, the hosted application will require a private PostgreSQL `DATABASE_URL`, a newly generated `JWT_SECRET` of at least 32 characters, and authenticated Redis URLs for cache, broker, and result roles. Automatic seeding and OpenTelemetry export remain disabled initially. The application repository may reference a Secret by name but does not own its values.
 
@@ -191,7 +191,7 @@ docker build -f docker/Dockerfile \
 
 On a push to `main`, CI runs application and integration tests, builds and smoke-tests the runtime image, then publishes exactly `ghcr.io/etclank/smartenergy-api:<full-40-character-sha>`. It records the registry `sha256:...` as a job output, workflow summary, and `image-metadata-<sha>` artifact. Buildx also attaches an SBOM and maximum-mode provenance to the registry image. These attestations provide traceability; no admission policy currently enforces them.
 
-The current production reference is `ghcr.io/etclank/smartenergy-api@sha256:7a35d14461bd6ee81bf67cf09bef792c866ad7673add9077e7b770e5fff99792`. GHCR visibility is public, so no image pull Secret is required.
+The current production reference is `ghcr.io/etclank/smartenergy-api@sha256:b9ed2c1be78d707f234df14e08679204a5249def787d0b8e26f398cce41e415f`. GHCR visibility is public, so no image pull Secret is required.
 
 The Python base is pinned as a readable tag plus multi-platform digest in `docker/Dockerfile`. To update it, inspect the current upstream manifest with `docker buildx imagetools inspect python:3.13-slim`, replace the verified digest in both the build argument and OCI base label, then rebuild and repeat the test and read-only smoke suites. Alembic uses Python PostgreSQL drivers and does not need `psql`; the main image therefore omits PostgreSQL clients. Backup and restore use the separately pinned official PostgreSQL image for `pg_dump` and `pg_restore`.
 

@@ -10,7 +10,7 @@ metadata:
     argocd.argoproj.io/hook: Sync
     argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
     argocd.argoproj.io/sync-wave: "-1"
-    smartenergy.eoghanclancy.eu/revision: 1cbe7dd0991b1495dfabdd08a69a00755c5961aa
+    smartenergy.eoghanclancy.eu/image-source-revision: 3e39c1e66c15f276aeb88fa5c4d322ec301870e2
 spec:
   backoffLimit: 2
   activeDeadlineSeconds: 600
@@ -33,7 +33,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: migration
-          image: ghcr.io/etclank/smartenergy-api@sha256:7a35d14461bd6ee81bf67cf09bef792c866ad7673add9077e7b770e5fff99792
+          image: ghcr.io/etclank/smartenergy-api@sha256:b9ed2c1be78d707f234df14e08679204a5249def787d0b8e26f398cce41e415f
           imagePullPolicy: IfNotPresent
           command:
             - alembic

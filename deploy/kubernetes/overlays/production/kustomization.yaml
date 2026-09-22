@@ -10,4 +10,4 @@ resources:
 images:
   - name: ghcr.io/etclank/smartenergy-api
     newName: ghcr.io/etclank/smartenergy-api
-    digest: sha256:7a35d14461bd6ee81bf67cf09bef792c866ad7673add9077e7b770e5fff99792
+    digest: sha256:b9ed2c1be78d707f234df14e08679204a5249def787d0b8e26f398cce41e415f

@@ -93,7 +93,7 @@ Status: approved design for the hosted SmartEnergy deployment. The application-o
 ## D12 — Public GHCR and immutable delivery
 
 - **Decision:** Publish a public GHCR image tagged with the full Git SHA and pin its digest in the production overlay.
-- **Context:** GHCR contains the public full-SHA image for `1cbe7dd0991b1495dfabdd08a69a00755c5961aa`, with verified digest, SBOM, and provenance; the production overlay pins that digest.
+- **Context:** GHCR contains the public full-SHA image for source revision `3e39c1e66c15f276aeb88fa5c4d322ec301870e2`, with verified digest, SBOM, and provenance; the later deployment revision pins that digest in the production overlay.
 - **Reason:** Public pulls avoid registry credentials while the digest binds deployment to reviewed content.
 - **Trade-off:** The image is publicly downloadable.
 - **Reconsider when:** Image contents or repository policy require private distribution.
