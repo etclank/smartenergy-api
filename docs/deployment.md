@@ -10,9 +10,9 @@ The repository currently provides:
 
 - a local Compose stack with PostgreSQL 16, a one-shot Alembic migration service, Redis 7, the API, a concurrency-1 Celery worker, and a separate Beat scheduler;
 - a runtime-only VM Compose file with optional separate worker and Beat services;
-- one application image used by the API, worker, and Beat;
+- one digest-pinned, multi-stage application image used by the API, worker, Beat, and migration command;
 - a Kubernetes starter containing one API Deployment and ClusterIP Service;
-- CI validation that builds, but does not publish, the image.
+- CI validation that can publish a full-SHA-tagged GHCR image with digest metadata, SBOM, and provenance after all quality gates pass.
 
 [`deploy/kubernetes/`](../deploy/kubernetes/) is a starter. It is not a complete production package and does not contain PostgreSQL, Redis, worker, Beat, migrations, backups, ingress, certificates, middleware, or NetworkPolicies. It will later evolve into a base and `deploy/kubernetes/overlays/production` structure. No files have been moved yet.
 
@@ -31,7 +31,7 @@ The completed platform contract reserves:
 
 `Application/smartenergy` does not exist. No SmartEnergy workload is deployed. The application repository will own its production Kustomize package and namespaced runtime resources; Project 1 will later add the Argo Application and private Prometheus integration.
 
-The intended image is public `ghcr.io/etclank/smartenergy-api`, published with a full commit-SHA tag and deployed by digest. Current CI does not publish this package.
+The intended image is public `ghcr.io/etclank/smartenergy-api`, published with a full commit-SHA tag and deployed by digest. The workflow is configured to publish on successful pushes to `main`; actual package existence remains unverified until that workflow runs remotely.
 
 Runtime Secret values remain outside Git. At minimum, the hosted application will require a private PostgreSQL `DATABASE_URL`, a newly generated `JWT_SECRET` of at least 32 characters, and authenticated Redis URLs for cache, broker, and result roles. Automatic seeding and OpenTelemetry export remain disabled initially. The application repository may reference a Secret by name but does not own its values.
 
@@ -99,7 +99,7 @@ Application HTTP remains on TCP 8000. The API process starts and stops a separat
 
 Local development retains readable console and file output. With `ENV=prod`, API, worker, and Beat emit role-labelled structured JSON to stdout/stderr and never create `/app/logs`. Beat writes only its ephemeral state under `/tmp`; hosted roles do not create SQLite or backup files during normal operation.
 
-PostgreSQL and Redis require their own persistent data mounts. The exact image UIDs, security contexts, and writable paths must be validated under the platform's restricted Pod Security Admission policy before live deployment.
+The application image runs as UID/GID 10001, keeps application files read-only, and needs only writable `/tmp` storage for ephemeral state. This contract has been exercised locally with a read-only root filesystem. PostgreSQL and Redis require their own persistent data mounts. Their exact image UIDs, security contexts, and writable paths must be validated under the platform's restricted Pod Security Admission policy before live deployment.
 
 ## PostgreSQL and Redis targets
 
@@ -187,19 +187,23 @@ Idempotency classification is:
 
 ## Image delivery
 
-The current manual example remains useful before CI publication exists:
+Build the same artifact locally with:
 
 ```bash
-IMAGE=ghcr.io/etclank/smartenergy-api
 REVISION=$(git rev-parse HEAD)
 docker build -f docker/Dockerfile \
-  --label org.opencontainers.image.revision="$REVISION" \
-  -t "$IMAGE:$REVISION" .
-docker push "$IMAGE:$REVISION"
-docker buildx imagetools inspect "$IMAGE:$REVISION"
+  --build-arg VCS_REF="$REVISION" \
+  --build-arg VERSION="$REVISION" \
+  -t smartenergy-api:"$REVISION" .
 ```
 
-Record the registry digest and use `ghcr.io/etclank/smartenergy-api@sha256:...` in the production overlay. The planned CI path will use a digest-pinned multi-stage application image; the current Dockerfile remains unchanged.
+On a push to `main`, CI runs application and integration tests, builds and smoke-tests the runtime image, then publishes exactly `ghcr.io/etclank/smartenergy-api:<full-40-character-sha>`. It records the registry `sha256:...` as a job output, workflow summary, and `image-metadata-<sha>` artifact. Buildx also attaches an SBOM and maximum-mode provenance to the registry image. These attestations provide traceability; no admission policy currently enforces them.
+
+Record the registry digest and use `ghcr.io/etclank/smartenergy-api@sha256:...` in the future production overlay. GitHub may create the first GHCR package as private; if so, a repository owner must change the package visibility to public in GitHub Packages after the first successful publication. CI does not use a long-lived PAT and does not attempt to alter visibility.
+
+The Python base is pinned as a readable tag plus multi-platform digest in `docker/Dockerfile`. To update it, inspect the current upstream manifest with `docker buildx imagetools inspect python:3.13-slim`, replace the verified digest in both the build argument and OCI base label, then rebuild and repeat the test and read-only smoke suites. Alembic uses the Python PostgreSQL drivers and does not need `psql`; the main image therefore omits `postgresql-client`. Stage 5 should use a separate digest-pinned PostgreSQL backup image for `pg_dump`.
+
+The image-level Docker healthcheck calls `/api/health/z` for local Docker and Compose operation. It does not define future Kubernetes liveness or readiness probes; those will be configured explicitly in the Kubernetes workload.
 
 ## Docker on a VM
 

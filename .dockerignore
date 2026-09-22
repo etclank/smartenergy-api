@@ -20,9 +20,24 @@ alembic/versions/__pycache__/
 tests/__pycache__/
 
 .git/
+.github/
 .env.*
 !.env.example
 backups/
 logs/
 .ruff_cache/
 celerybeat-schedule*
+tests/
+docs/
+deploy/
+.idea/
+.vscode/
+.tox/
+.nox/
+htmlcov/
+*.egg-info/
+*.pem
+*.key
+id_rsa*
+*.swp
+*.tmp

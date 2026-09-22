@@ -29,7 +29,7 @@ Status: approved design for the hosted SmartEnergy deployment. D1, D2, D3, D5, a
 ## D4 — Immutable application image
 
 - **Decision:** Build a digest-pinned, multi-stage application image and deploy it by registry digest.
-- **Context:** The current single-stage image retains build tooling and starts from a floating base tag.
+- **Context:** The application now uses a digest-pinned multi-stage image, transfers a locked virtual environment, and omits build tooling from runtime.
 - **Reason:** A smaller reproducible runtime improves delivery traceability and reduces unnecessary packages.
 - **Trade-off:** The Dockerfile and dependency-copy process become more involved.
 - **Reconsider when:** Measured maintenance cost exceeds the size and reproducibility benefit.
@@ -93,7 +93,7 @@ Status: approved design for the hosted SmartEnergy deployment. D1, D2, D3, D5, a
 ## D12 — Public GHCR and immutable delivery
 
 - **Decision:** Publish a public GHCR image tagged with the full Git SHA and pin its digest in the production overlay.
-- **Context:** CI currently builds locally and no GHCR package exists.
+- **Context:** CI can publish a full-SHA-tagged GHCR image with digest metadata, SBOM, and provenance after all validation jobs pass. Package existence and public visibility still require the first remote run.
 - **Reason:** Public pulls avoid registry credentials while the digest binds deployment to reviewed content.
 - **Trade-off:** The image is publicly downloadable.
 - **Reconsider when:** Image contents or repository policy require private distribution.

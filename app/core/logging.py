@@ -55,7 +55,11 @@ def setup_logging(role: str | None = None) -> None:
         # Hosted processes emit structured logs only to stdout.
         logger.add(sys.stdout, level=log_level, enqueue=True, serialize=True)
     else:
-        log_path = os.path.join(os.getcwd(), "logs")
+        working_directory = os.getcwd()
+        log_path = os.path.join(
+            working_directory if os.access(working_directory, os.W_OK) else "/tmp",
+            "logs",
+        )
         os.makedirs(log_path, exist_ok=True)
         log_file = os.path.join(log_path, "app.log")
         # Development → colorful readable logs

@@ -1,78 +1,78 @@
-# -----------------------------
-# SmartEnergy API — Dockerfile
-# -----------------------------
-FROM python:3.13-slim AS base
+ARG PYTHON_IMAGE=python:3.13-slim@sha256:8d9d0b8bcf6506481eae4907c18f5e3e7902e629f5f6d684f9e7c32e85e3ddf0
 
-# Environment config
-ENV PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1 \
+FROM ${PYTHON_IMAGE} AS builder
+
+ENV PIP_DISABLE_PIP_VERSION_CHECK=1 \
     PIP_NO_CACHE_DIR=1 \
-    PIP_DISABLE_PIP_VERSION_CHECK=1 \
-    PATH="/usr/local/bin:$PATH"
+    POETRY_NO_INTERACTION=1 \
+    POETRY_VIRTUALENVS_CREATE=false
 
-WORKDIR /app
-
-# -----------------------------
-# System dependencies
-# -----------------------------
-# build-essential, gcc: compile native deps
-# curl: for health/debug usage
-# postgresql-client: available for manual database diagnostics
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential \
-    gcc \
-    libffi-dev \
-    libssl-dev \
-    python3-dev \
-    curl \
-    postgresql-client \
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends build-essential libffi-dev libssl-dev \
  && rm -rf /var/lib/apt/lists/*
 
-# -----------------------------
-# Install Poetry and dependencies
-# -----------------------------
-COPY pyproject.toml poetry.lock* /app/
+RUN pip install "poetry==2.2.1"
 
-RUN pip install "poetry==2.2.1" \
- && poetry config virtualenvs.create false \
- && poetry install --no-interaction --no-ansi --no-root --without dev
+ENV VIRTUAL_ENV=/opt/venv \
+    PATH="/opt/venv/bin:/usr/local/bin:/usr/local/sbin:/usr/sbin:/usr/bin:/sbin:/bin"
 
-# -----------------------------
-# Copy application source
-# -----------------------------
-COPY . /app
-RUN useradd --create-home --uid 10001 appuser \
- && mkdir -p /app/logs /app/backups \
- && chown -R appuser:appuser /app
-USER appuser
+RUN python -m venv "${VIRTUAL_ENV}"
 
-# Ensure prestart script is executable
-RUN chmod +x /app/scripts/prestart.sh
+WORKDIR /build
+COPY pyproject.toml poetry.lock ./
+RUN poetry install --only main --no-root --no-ansi \
+ && chmod -R a-w "${VIRTUAL_ENV}"
 
-# -----------------------------
-# Optional environment variables for flexibility
-# -----------------------------
-ARG APP_MODULE="app.main:app"
-ENV APP_MODULE=${APP_MODULE}
-ENV HOST=0.0.0.0
-ENV PORT=8000
 
-# -----------------------------
-# Healthcheck (basic HTTP ping)
-# -----------------------------
-HEALTHCHECK --interval=30s --timeout=5s --start-period=15s \
-  CMD curl -fs http://localhost:${PORT:-8000}/api/health/z || exit 1
+FROM ${PYTHON_IMAGE} AS runtime
 
-# -----------------------------
-# Expose API and private metrics ports
-# -----------------------------
+ARG VCS_REF=unknown
+ARG VERSION=0.1.0
+ARG BUILD_DATE=unknown
+
+LABEL org.opencontainers.image.title="SmartEnergy API" \
+      org.opencontainers.image.description="FastAPI smart-meter portfolio application" \
+      org.opencontainers.image.source="https://github.com/etclank/smartenergy-api" \
+      org.opencontainers.image.revision="${VCS_REF}" \
+      org.opencontainers.image.version="${VERSION}" \
+      org.opencontainers.image.created="${BUILD_DATE}" \
+      org.opencontainers.image.licenses="MIT" \
+      org.opencontainers.image.base.name="docker.io/library/python:3.13-slim@sha256:8d9d0b8bcf6506481eae4907c18f5e3e7902e629f5f6d684f9e7c32e85e3ddf0"
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PIP_NO_CACHE_DIR=1 \
+    VIRTUAL_ENV=/opt/venv \
+    PATH="/opt/venv/bin:/usr/local/bin:/usr/local/sbin:/usr/sbin:/usr/bin:/sbin:/bin" \
+    HOME=/tmp \
+    ENV=prod \
+    ROLE=web \
+    HOST=0.0.0.0 \
+    PORT=8000
+
+RUN groupadd --gid 10001 appuser \
+ && useradd --uid 10001 --gid 10001 --no-create-home --home-dir /tmp \
+      --shell /usr/sbin/nologin appuser
+
+COPY --from=builder /opt/venv /opt/venv
+
+WORKDIR /app
+COPY --chown=root:root app ./app
+COPY --chown=root:root alembic ./alembic
+COPY --chown=root:root alembic.ini ./alembic.ini
+COPY --chown=root:root scripts ./scripts
+COPY --chown=root:root site ./site
+
+RUN chmod 0555 /app/scripts/prestart.sh \
+ && chmod -R a-w /app
+
+USER 10001:10001
+
 EXPOSE 8000 9090
 
-# -----------------------------
-# Entrypoint
-# -----------------------------
-# Default entrypoint runs prestart.sh, which starts Uvicorn without changing
-# the database schema. Run Alembic as a separate deployment step.
-#
-# ROLE selects the web, worker, or Beat process without combining roles.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=15s \
+  CMD ["python", "-c", "import os, urllib.request; urllib.request.urlopen('http://127.0.0.1:' + os.getenv('PORT', '8000') + '/api/health/z', timeout=3).read()"]
+
+STOPSIGNAL SIGTERM
 CMD ["/app/scripts/prestart.sh"]

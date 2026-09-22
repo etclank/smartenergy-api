@@ -176,7 +176,7 @@ TEST_CELERY_RESULT_URL=redis://127.0.0.1:6379/15 \
 poetry run pytest tests/integration/test_celery_runtime.py -m celery
 ```
 
-GitHub Actions runs lint, formatting, mypy, tests with coverage artifacts and a Docker build. Separate service-backed jobs validate PostgreSQL migrations/readiness and a real Redis broker, Celery worker, and result backend. It needs no Codecov token. Coverage is reported, with no claimed percentage or enforced threshold.
+GitHub Actions runs lint, formatting, mypy, tests with coverage artifacts, and service-backed PostgreSQL and Celery integration checks. It then validates the runtime image and, for a push to `main`, can publish an immutable full-commit-SHA image to GHCR with its digest, SBOM, and provenance. It needs no Codecov token. Coverage is reported, with no claimed percentage or enforced threshold.
 
 ## Docker
 
@@ -203,7 +203,9 @@ docker run --rm --name smartenergy-sqlite -p 127.0.0.1:8000:8000 \
   --env-file .env smartenergy-api:local
 ```
 
-The image runs as a non-root user. In `ENV=prod`, all roles log structured JSON to stdout/stderr and create no log directory. Beat keeps non-authoritative schedule state under `/tmp`. Local SQLite data and manually requested SQLite snapshots remain development-only. `docker compose down` preserves PostgreSQL data; adding `-v` deletes it.
+The digest-pinned multi-stage image runs as UID/GID 10001 and contains no compiler, Poetry, or PostgreSQL client. The same artifact runs the API, worker, Beat, and explicit Alembic migrations. In `ENV=prod`, all roles log structured JSON to stdout/stderr and create no log directory. Beat keeps non-authoritative schedule state under `/tmp`, so the hosted roles support a read-only root filesystem with writable temporary storage. Local SQLite data and manually requested SQLite snapshots remain development-only. `docker compose down` preserves PostgreSQL data; adding `-v` deletes it.
+
+After a successful `main` workflow, the publication reference is `ghcr.io/etclank/smartenergy-api:<full-40-character-sha>`. A later Kubernetes stage will consume `ghcr.io/etclank/smartenergy-api@sha256:<digest>`, using the digest recorded by CI rather than the tag. The workflow is ready to publish; this repository does not claim that an image exists until the remote workflow has run. The first package publication may require its GitHub Packages visibility to be changed to public manually.
 
 ## VM and Kubernetes deployment
 
@@ -218,7 +220,7 @@ The same image can run on a Docker VM or a Kubernetes cluster. The dashboard is 
 
 PostgreSQL and Redis are provisioned separately; these runtime examples do not create database storage or backups. The existing root `docker-compose.yml` remains the local development stack.
 
-SmartEnergy is intended for onboarding to the Cloud-Native Service Control Plane through its GitOps/Kustomize application route. The platform already reserves the `smartenergy` namespace and AppProject, but `Application/smartenergy` does not exist and no SmartEnergy workload is deployed. Review capacity and data persistence before adding it to the small single-node cluster. The starter does not enable OTLP export or add Prometheus targets.
+SmartEnergy is intended for onboarding to the Cloud-Native Service Control Plane through its GitOps/Kustomize application route. CI can build and publish immutable SmartEnergy images to GHCR, but production Kubernetes packaging and deployment are not yet implemented. The platform already reserves the `smartenergy` namespace and AppProject, but `Application/smartenergy` does not exist and no SmartEnergy workload is deployed. Review capacity and data persistence before adding it to the small single-node cluster. The starter does not enable OTLP export or add Prometheus targets.
 
 ## Limitations
 
