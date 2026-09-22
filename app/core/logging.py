@@ -39,34 +39,30 @@ def serialize(record: dict) -> str:
     return json.dumps(payload)
 
 
-def setup_logging() -> None:
+def setup_logging(role: str | None = None) -> None:
     """Configure Loguru as the global logger."""
     # Remove default handler to avoid duplicates
     logger.remove()
 
     env = os.getenv("ENV", "dev")
     log_level = os.getenv("LOG_LEVEL", "INFO").upper()
-
-    log_path = os.path.join(os.getcwd(), "logs")
-    os.makedirs(log_path, exist_ok=True)
-    log_file = os.path.join(log_path, "app.log")
+    runtime_role = role or os.getenv("ROLE", "process")
+    if runtime_role == "web":
+        runtime_role = "api"
+    logger.configure(extra={"role": runtime_role})
 
     if env == "prod":
-        # Production → JSON logs + rotation
-        logger.add(
-            log_file,
-            level=log_level,
-            rotation="1 day",
-            retention="7 days",
-            enqueue=True,
-            serialize=True,  # use built-in JSON serializer
-        )
+        # Hosted processes emit structured logs only to stdout.
         logger.add(sys.stdout, level=log_level, enqueue=True, serialize=True)
     else:
+        log_path = os.path.join(os.getcwd(), "logs")
+        os.makedirs(log_path, exist_ok=True)
+        log_file = os.path.join(log_path, "app.log")
         # Development → colorful readable logs
         fmt = (
             "<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | "
             "<level>{level: <8}</level> | "
+            "{extra[role]} | "
             "<cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - "
             "<level>{message}</level>"
         )
@@ -95,4 +91,9 @@ def setup_logging() -> None:
     logging.getLogger("uvicorn.error").handlers = [InterceptHandler()]
     logging.getLogger("uvicorn.access").handlers = [InterceptHandler()]
 
-    logger.info(f"[logging] Initialized Loguru ({env=}, level={log_level})")
+    logger.info(
+        "[logging] Initialized Loguru (env={}, level={}, role={})",
+        env,
+        log_level,
+        runtime_role,
+    )

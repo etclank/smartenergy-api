@@ -9,17 +9,19 @@ services:
       ENV: prod
       ROLE: web
       PORT: "8000"
+      METRICS_HOST: 0.0.0.0
+      METRICS_PORT: "9090"
       SEED_DEMO: "0"
       ENABLE_TELEMETRY: "0"
     ports:
       - "127.0.0.1:8000:8000"
+      - "127.0.0.1:9090:9090"
     restart: unless-stopped
     read_only: true
     cap_drop: [ALL]
     security_opt: [no-new-privileges:true]
     tmpfs:
       - /tmp:uid=10001,gid=10001,mode=1770,size=64m
-      - /app/logs:uid=10001,gid=10001,mode=0750,size=64m
     cpus: 0.5
     mem_limit: 512m
     logging:
@@ -34,13 +36,9 @@ services:
     env_file: ../.env.vm
     environment:
       ENV: prod
-      API_HOST: api
-      API_PORT: "8000"
+      ROLE: worker
       ENABLE_TELEMETRY: "0"
-    command: [celery, -A, app.tasks.worker.celery_app, worker, --beat, --concurrency=1, --loglevel=info, --schedule=/tmp/celerybeat-schedule]
-    depends_on:
-      api:
-        condition: service_healthy
+    command: ["/app/scripts/prestart.sh"]
     healthcheck:
       disable: true
     restart: unless-stopped
@@ -49,9 +47,33 @@ services:
     security_opt: [no-new-privileges:true]
     tmpfs:
       - /tmp:uid=10001,gid=10001,mode=1770,size=64m
-      - /app/logs:uid=10001,gid=10001,mode=0750,size=64m
     cpus: 0.5
     mem_limit: 512m
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  beat:
+    profiles: [worker]
+    image: ${SMARTENERGY_IMAGE:?Set an immutable SMARTENERGY_IMAGE in .env.vm}
+    env_file: ../.env.vm
+    environment:
+      ENV: prod
+      ROLE: beat
+      ENABLE_TELEMETRY: "0"
+    command: ["/app/scripts/prestart.sh"]
+    healthcheck:
+      disable: true
+    restart: unless-stopped
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    tmpfs:
+      - /tmp:uid=10001,gid=10001,mode=1770,size=64m
+    cpus: 0.25
+    mem_limit: 256m
     logging:
       driver: json-file
       options:

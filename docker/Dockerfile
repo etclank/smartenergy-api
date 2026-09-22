@@ -64,9 +64,9 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=15s \
   CMD curl -fs http://localhost:${PORT:-8000}/api/health/z || exit 1
 
 # -----------------------------
-# Expose API port
+# Expose API and private metrics ports
 # -----------------------------
-EXPOSE 8000
+EXPOSE 8000 9090
 
 # -----------------------------
 # Entrypoint
@@ -74,6 +74,5 @@ EXPOSE 8000
 # Default entrypoint runs prestart.sh, which starts Uvicorn without changing
 # the database schema. Run Alembic as a separate deployment step.
 #
-# Celery worker service overrides this in docker-compose:
-#   command: celery -A app.tasks.worker worker -B --loglevel=info
+# ROLE selects the web, worker, or Beat process without combining roles.
 CMD ["/app/scripts/prestart.sh"]

@@ -36,28 +36,28 @@ flowchart LR
     JWT --> API
     API --> DB[(PostgreSQL or SQLite)]
     API <--> Cache[(Redis response cache)]
-    API --> Tasks[In-process background tasks]
-    Tasks --> DB
-    Beat[Celery Beat] --> Broker[(Redis broker)]
+    API -->|enqueue + task ID| Broker[(Redis broker)]
+    API -->|explicit cache warmup only| Local[Best-effort local task]
+    Beat[Single Celery Beat] --> Broker
     Broker --> Worker[Celery worker]
     Worker --> DB
     Worker --> Cache
 ```
 
-This diagram describes the application today. The local Compose stack runs PostgreSQL 16, Redis 7, the API, and one Celery worker that also runs Beat. Direct HTTP task requests still use FastAPI `BackgroundTasks` inside the API process.
+This diagram describes the application today. The local Compose stack runs PostgreSQL 16, Redis 7, the API, one concurrency-1 Celery worker, and one separate Beat scheduler.
 
 - Python 3.13, FastAPI, Pydantic, SQLAlchemy 2, asyncpg/PostgreSQL and aiosqlite/SQLite; versions resolved in `poetry.lock`.
 - Sites, meters, tariffs, imported/exported/reactive energy, maximum power and daily site summaries.
 - Public read endpoints for the dashboard; password-verified JWT login for meter creation and operational tasks.
 - Redis caching with bounded TTLs and database fallback when Redis is unavailable.
-- Celery/Beat jobs for synthetic readings, KPI refresh, cache maintenance, system metrics and optional SendGrid email.
-- Prometheus metrics, optional OpenTelemetry instrumentation, and Loguru console/file logs.
+- Celery jobs for synthetic readings, KPI refresh, cache maintenance, system metrics and optional SendGrid email; Beat enables only the reviewed KPI, metrics and cache-clean schedules.
+- Private Prometheus metrics on TCP 9090, optional OpenTelemetry instrumentation, and role-labelled Loguru output.
 
 `app/api/` contains routes and schemas, `app/models/` the database mappings, `app/core/` configuration and infrastructure, and `app/tasks/` background work. `scripts/` contains database initialization and seeding; `site/` contains the static dashboard. Tests live in `tests/`.
 
-HTTP task endpoints use FastAPI `BackgroundTasks` in the API process. They do **not** enqueue Celery messages. Celery Beat separately schedules the same task implementations. A `202` response confirms scheduling, not successful completion.
+Durable HTTP task endpoints enqueue Celery messages and return a task ID. A `202` means accepted by the broker, not completed. Explicit cache warmup remains best-effort work in the API process. Database migration, demo seeding and PostgreSQL backup are not task API operations.
 
-The planned hosted architecture separates the API, Celery worker, and the single Celery Beat scheduler. It also adds a migration Job, backup CronJob, PostgreSQL and Redis StatefulSets, and a private Prometheus listener on TCP 9090. These are approved design targets, not current behavior. See the [architecture and deployment decisions](docs/architecture-deployment-decisions.md) for the stable design record.
+The runtime now separates the API, concurrency-1 Celery worker, and single Celery Beat scheduler. The later production package will add the migration Job, backup CronJob, PostgreSQL and Redis StatefulSets. See the [architecture and deployment decisions](docs/architecture-deployment-decisions.md) for the stable design record.
 
 ## Configuration
 
@@ -73,10 +73,11 @@ Settings read process environment first, then `.env`. Real environment files, lo
 | `FRONTEND_ORIGINS` | JSON array of allowed origins; default `[]` (same-origin dashboard needs no CORS). |
 | `DEMO_PASSWORD` | Password used only by the explicit demo seed command. Never use a shared default password. |
 | `CELERY_BROKER_URL`, `CELERY_RESULT_BACKEND` | Worker Redis URLs; each falls back to `REDIS_URL`. |
-| `API_HOST`, `API_PORT` | Address used by task cache warmup. Set to the API service from a separate worker. |
+| `API_HOST`, `API_PORT` | Address used by explicit best-effort cache warmup. |
+| `METRICS_HOST`, `METRICS_PORT` | Private Prometheus listener, `0.0.0.0:9090`. |
 | `SENDGRID_API_KEY`, `SENDGRID_FROM_EMAIL`, `HEALTH_EMAIL_TO` | Optional health email; use a verified sender and a restricted key. |
 | `ENV` | Application environment, default `dev`. |
-| `PORT`, `ROLE` | Container startup: HTTP port (default `8000`) and `web` or `worker`. |
+| `PORT`, `ROLE` | Container startup: HTTP port (default `8000`) and `web`, `worker`, or `beat`. |
 | `LOG_LEVEL`, `ENABLE_TELEMETRY` | Process environment only: default `INFO`, `0`. |
 | `OTEL_SERVICE_NAME`, `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_EXPORTER_OTLP_HEADERS` | Process environment only; optional telemetry export configuration. |
 
@@ -128,9 +129,10 @@ Use the returned token as `Authorization: Bearer <token>`. There is no public re
 | `POST /api/meters/` | Authenticated meter creation. |
 | `GET /api/energy_imported/`, `/api/energy_exported/`, `/api/energy_reactive/`, `/api/max_power/` | Public readings; optional `meter_id` filter. |
 | `GET /api/tariffs/` | Public tariffs; optional `site_id` filter. |
-| `GET /api/system_metrics/`, `/api/system_metrics/latest` | Public recorded system measurements. |
-| `GET /api/metrics` | Prometheus exposition. |
-| `POST /api/tasks/*` | Authenticated operational actions; inspect `/docs` for all routes. |
+| `GET /api/system_metrics/`, `/api/system_metrics/latest` | Public recorded system measurements; access changes are deferred because the dashboard currently reads them. |
+| `GET :9090/metrics` | Private Prometheus exposition on the separate metrics listener. `/api/metrics` does not exist. |
+| `POST /api/tasks/*` | Authenticated actions. Durable operations return `202`, an operation name and Celery task ID. Cache warmup is explicitly best-effort. |
+| `GET /api/tasks/{task_id}` | Authenticated bounded task state: `PENDING`, `STARTED`, `SUCCESS`, or `FAILURE`; results and tracebacks are not returned. |
 
 OpenAPI is available at `/openapi.json`. All authenticated users currently share operator privileges; there is no tenant isolation or role hierarchy. Read endpoints intentionally expose demo data publicly.
 
@@ -138,7 +140,7 @@ OpenAPI is available at `/openapi.json`. All authenticated users currently share
 
 Sites, meters and energy reads use 60-second TTLs; maximum power uses 120 seconds and tariffs 300 seconds. Keys include the request path and query string. Cache misses query the database; responses are encoded as JSON before storage. Redis errors fall back to database reads.
 
-Writes do not invalidate cached reads immediately: data can remain stale until its TTL expires. The authenticated `/api/tasks/cache/clean` action clears `cache:*` keys, and warmup requests common read routes. Redis remains necessary for the Celery broker even though it is optional for API reads.
+Writes do not invalidate cached reads immediately: data can remain stale until its TTL expires. The authenticated `/api/tasks/cache/clean` action durably enqueues deletion of `cache:*` keys. Explicit cache warmup remains API-local and best-effort; it is not scheduled by Beat. Redis remains necessary for the Celery broker even though it is optional for API reads.
 
 ## Dashboard
 
@@ -165,13 +167,16 @@ poetry run mypy --config-file mypy.ini app
 node tests/dashboard_smoke.cjs
 ```
 
-Tests use a temporary SQLite database and safe configuration set before application imports. They cover routes, password/token behavior, protected writes, cache keys/serialization, initialization, tasks and failure paths. External email is mocked. The optional Redis integration test skips unless `TEST_REDIS_URL` points to a disposable test Redis instance:
+Tests use a temporary SQLite database and safe configuration set before application imports. They cover routes, password/token behavior, protected writes, cache keys/serialization, initialization, tasks and failure paths. External email is mocked. Service-backed Redis tests skip unless their test URLs are supplied. The Celery integration test uses separate logical Redis databases for broker and results and a real worker:
 
 ```bash
 TEST_REDIS_URL=redis://127.0.0.1:6379/15 poetry run pytest
+TEST_CELERY_BROKER_URL=redis://127.0.0.1:6379/14 \
+TEST_CELERY_RESULT_URL=redis://127.0.0.1:6379/15 \
+poetry run pytest tests/integration/test_celery_runtime.py -m celery
 ```
 
-GitHub Actions runs lint, formatting, mypy, tests with coverage artifacts and a Docker build. It needs no Codecov token. Coverage is reported, with no claimed percentage or enforced threshold. SQLite tests do not establish full PostgreSQL or managed-service compatibility.
+GitHub Actions runs lint, formatting, mypy, tests with coverage artifacts and a Docker build. Separate service-backed jobs validate PostgreSQL migrations/readiness and a real Redis broker, Celery worker, and result backend. It needs no Codecov token. Coverage is reported, with no claimed percentage or enforced threshold.
 
 ## Docker
 
@@ -181,11 +186,11 @@ Docker Engine and the Compose plugin are required. Create `.env` and generate `J
 docker compose up --build -d
 docker compose ps
 curl --fail http://localhost:8000/api/health/z
-docker compose logs --tail=50 api worker
+docker compose logs --tail=50 api worker beat
 docker compose down
 ```
 
-Compose starts PostgreSQL 16, runs `alembic upgrade head` as a one-shot migration service, then starts Redis, the API, and a Celery worker with Beat. Ports bind to localhost. PostgreSQL has a named persistent volume and local-only development credentials. The worker waits for API health. Do not use these database defaults on a public host.
+Compose starts PostgreSQL 16, runs `alembic upgrade head` as a one-shot migration service, then starts Redis, the API, a concurrency-1 Celery worker, and one Beat scheduler. Application and metrics ports bind to localhost. Worker and Beat wait for PostgreSQL migration and Redis health without depending on the API. Do not use these database defaults on a public host.
 
 An existing pre-Alembic Compose volume must be backed up, validated, and stamped with `scripts.adopt_legacy_schema` before the migration service can manage it. Do not delete an existing volume merely to bypass validation.
 
@@ -194,10 +199,11 @@ For a standalone SQLite container:
 ```bash
 docker build -f docker/Dockerfile -t smartenergy-api:local .
 docker run --rm --name smartenergy-sqlite -p 127.0.0.1:8000:8000 \
+  -p 127.0.0.1:9090:9090 \
   --env-file .env smartenergy-api:local
 ```
 
-The image runs as a non-root user. SQLite data, logs, Beat state and file snapshots inside a container are ephemeral unless you mount writable storage owned by UID 10001. `docker compose down` preserves PostgreSQL data; adding `-v` deletes it.
+The image runs as a non-root user. In `ENV=prod`, all roles log structured JSON to stdout/stderr and create no log directory. Beat keeps non-authoritative schedule state under `/tmp`. Local SQLite data and manually requested SQLite snapshots remain development-only. `docker compose down` preserves PostgreSQL data; adding `-v` deletes it.
 
 ## VM and Kubernetes deployment
 
@@ -218,11 +224,11 @@ SmartEnergy is intended for onboarding to the Cloud-Native Service Control Plane
 
 This project remains a demonstration application:
 
-- No rate limiting, token revocation, tenant isolation or durable HTTP task queue. Restrict deployment access and use HTTPS before handling non-demo data.
+- No rate limiting, token revocation or tenant isolation. Restrict deployment access and use HTTPS before handling non-demo data.
 - No zero-downtime multi-version migration guarantee, broad pagination or concurrency guarantees for scheduled aggregates/seeding. Run one Beat scheduler.
-- Celery has no `acks_late`, worker-lost rejection, explicit retry or prefetch policy, or task time limits. It does not claim exactly-once or guaranteed delivery.
+- Celery uses late acknowledgements, worker-lost rejection and prefetch 1. Delivery remains at-least-once-like and duplicate execution is possible; exactly-once is not claimed. Broad retries and arbitrary task time limits are intentionally absent.
 - The snapshot task supports local SQLite file copies only; it is not a consistent online-backup solution and does not back up PostgreSQL. Configure provider backups separately.
-- Health/system metrics are public, and metrics persistence failures can be tolerated silently. Do not treat them as an availability guarantee.
+- Recorded system metrics remain public for the current dashboard, while Prometheus metrics are private on TCP 9090. Metrics persistence failures can be tolerated silently; do not treat them as an availability guarantee.
 - Some tests share fixture data; deprecation warnings remain in the existing date/time and client code. Managed-service integration and load testing are outside the unit suite.
 - Dependencies are locked for reproducibility; that is not a vulnerability-free guarantee. Update and audit them before deployment.
 

@@ -1,7 +1,5 @@
 # tests/test_task_core_minimal.py
 import pytest
-import importlib
-import types
 
 
 # ---------------------------------------------------------------------
@@ -161,31 +159,12 @@ async def test_email_send_health(monkeypatch):
 # ---------------------------------------------------------------------
 # worker
 # ---------------------------------------------------------------------
-def test_worker_registers_tasks(monkeypatch):
+def test_worker_registers_tasks():
     """Ensure Celery worker loads correctly and tasks registered."""
-    import app.tasks.worker as worker_mod
+    from app.tasks.worker import celery_app
 
-    class DummyCelery:
-        def __init__(self, *a, **kw):
-            self.conf = types.SimpleNamespace(beat_schedule={}, update=lambda **_: None)
-            self.tasks = {}
-            self.name = "smartenergy"
-
-        def task(self, name=None, **_):
-            def decorator(fn):
-                self.tasks[name or fn.__name__] = fn
-                return fn
-
-            return decorator
-
-        def conf_update(self, **_):
-            pass
-
-    monkeypatch.setattr(worker_mod, "Celery", DummyCelery)
-    mod = importlib.reload(worker_mod)
-    app = mod.celery_app
-    assert hasattr(app, "tasks")
-    assert "kpis.refresh" in app.tasks or "demo.generate" in app.tasks
+    assert "kpis.refresh" in celery_app.tasks
+    assert "demo.generate" in celery_app.tasks
 
 
 @pytest.mark.asyncio

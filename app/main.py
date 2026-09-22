@@ -2,7 +2,12 @@
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from app.api.routers import api
-from app.api.metrics import REQUEST_COUNT, REQUEST_LATENCY
+from app.api.metrics import (
+    REQUEST_COUNT,
+    REQUEST_LATENCY,
+    start_metrics_server,
+    stop_metrics_server,
+)
 import time
 from app.core.logging import setup_logging
 from app.core.cache import get_redis, close_redis
@@ -18,6 +23,9 @@ from loguru import logger
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    metrics_server, metrics_thread = start_metrics_server(
+        settings.metrics_host, settings.metrics_port
+    )
     try:
         await get_redis()
     except Exception:
@@ -25,11 +33,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     try:
         yield
     finally:
+        stop_metrics_server(metrics_server, metrics_thread)
         await close_redis()
         await engine.dispose()
 
 
-setup_logging()  # 🔹 initialize global logger
+setup_logging("api")  # 🔹 initialize global logger
 
 app = FastAPI(title="SmartEnergy API", version="0.1.0", lifespan=lifespan)
 

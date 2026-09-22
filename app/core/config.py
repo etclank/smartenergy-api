@@ -11,6 +11,12 @@ class Settings(BaseSettings):
     env: str = Field(default="dev", validation_alias=AliasChoices("ENV"))
     api_host: str = Field(default="0.0.0.0", validation_alias=AliasChoices("API_HOST"))
     api_port: int = Field(default=8000, validation_alias=AliasChoices("API_PORT"))
+    metrics_host: str = Field(
+        default="0.0.0.0", validation_alias=AliasChoices("METRICS_HOST")
+    )
+    metrics_port: int = Field(
+        default=9090, validation_alias=AliasChoices("METRICS_PORT")
+    )
 
     # -------------------------------------------------------------------------
     # Database

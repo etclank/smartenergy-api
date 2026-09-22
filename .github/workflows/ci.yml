@@ -84,3 +84,42 @@ jobs:
         run: >-
           poetry run pytest --confcutdir=tests/integration
           tests/integration -m postgres
+
+  celery-integration:
+    runs-on: ubuntu-latest
+    services:
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    env:
+      DATABASE_URL: sqlite+aiosqlite:////tmp/smartenergy-celery.db
+      JWT_SECRET: celery-integration-test-secret
+      REDIS_URL: redis://127.0.0.1:6379/13
+      CELERY_BROKER_URL: redis://127.0.0.1:6379/14
+      CELERY_RESULT_BACKEND: redis://127.0.0.1:6379/15
+      TEST_CELERY_BROKER_URL: redis://127.0.0.1:6379/14
+      TEST_CELERY_RESULT_URL: redis://127.0.0.1:6379/15
+      ENABLE_TELEMETRY: "0"
+      ENV: prod
+      ROLE: worker
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Install Poetry
+        run: pip install poetry==2.2.1
+      - name: Install locked dependencies
+        run: poetry install --no-interaction --no-ansi
+      - name: Run broker, worker, and result-backend integration
+        run: |
+          poetry run celery -A app.tasks.worker.celery_app worker --pool=solo --concurrency=1 --loglevel=warning --pidfile=/tmp/smartenergy-celery.pid &
+          worker_pid=$!
+          trap 'kill "$worker_pid" 2>/dev/null || true; wait "$worker_pid" 2>/dev/null || true' EXIT
+          poetry run pytest --confcutdir=tests/integration tests/integration/test_celery_runtime.py -m celery

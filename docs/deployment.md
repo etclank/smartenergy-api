@@ -8,9 +8,9 @@ The [architecture decision record](architecture-deployment-decisions.md) is the 
 
 The repository currently provides:
 
-- a local Compose stack with PostgreSQL 16, a one-shot Alembic migration service, Redis 7, the API, and a Celery worker that also runs Beat;
-- a runtime-only VM Compose file with an optional combined worker/Beat service;
-- one application image used by the API and worker;
+- a local Compose stack with PostgreSQL 16, a one-shot Alembic migration service, Redis 7, the API, a concurrency-1 Celery worker, and a separate Beat scheduler;
+- a runtime-only VM Compose file with optional separate worker and Beat services;
+- one application image used by the API, worker, and Beat;
 - a Kubernetes starter containing one API Deployment and ClusterIP Service;
 - CI validation that builds, but does not publish, the image.
 
@@ -37,7 +37,7 @@ Runtime Secret values remain outside Git. At minimum, the hosted application wil
 
 ## Current and target runtime roles
 
-The current local and VM Compose worker runs Beat in the same process. Do not scale that combined service because doing so would create multiple schedulers.
+The local and VM Compose definitions run API, worker, and Beat as separate processes. Exactly one Beat process is a deployment invariant.
 
 The hosted design will use:
 
@@ -49,7 +49,7 @@ The hosted design will use:
 | Migration Job | Versioned schema upgrades before application rollout |
 | Backup CronJob | Daily PostgreSQL logical backup and off-node upload |
 
-Separating Beat gives the scheduler an independent lifecycle and resource budget and reduces duplicate-scheduling risk.
+Beat stores non-authoritative schedule state at `/tmp/celerybeat-schedule`; it does not require a persistent volume.
 
 ## Schema lifecycle
 
@@ -93,11 +93,11 @@ The probe contract is:
 - readiness: a bounded PostgreSQL `SELECT 1`, returning HTTP 503 on failure;
 - Redis: informational health only, because API reads fall back to PostgreSQL.
 
-Application HTTP will remain on TCP 8000. Prometheus metrics will move from the current `/api/metrics` route to a private TCP 9090 listener. The current route must not be publicly exposed during hosted deployment.
+Application HTTP remains on TCP 8000. The API process starts and stops a separate Prometheus listener on TCP 9090 with its FastAPI lifespan. `/api/metrics` no longer exists. The later Service may expose 9090 privately, but Ingress must not route it.
 
 ## Logging and writable paths
 
-Local development may retain Loguru file output. Kubernetes will use structured JSON on stdout/stderr and will not persist `/app/logs`. API, worker, Beat, and migration processes will use a read-only root filesystem with a bounded writable `/tmp` where needed.
+Local development retains readable console and file output. With `ENV=prod`, API, worker, and Beat emit role-labelled structured JSON to stdout/stderr and never create `/app/logs`. Beat writes only its ephemeral state under `/tmp`; hosted roles do not create SQLite or backup files during normal operation.
 
 PostgreSQL and Redis require their own persistent data mounts. The exact image UIDs, security contexts, and writable paths must be validated under the platform's restricted Pod Security Admission policy before live deployment.
 
@@ -147,21 +147,23 @@ The following will be private or disabled initially:
 - ReDoc;
 - OpenAPI JSON.
 
-This is target deployment behavior. The current application still serves metrics, system metrics, Swagger, ReDoc, and OpenAPI on the main HTTP listener. Later application and ingress work will enforce the approved boundary.
+Prometheus metrics are now separated onto TCP 9090. Recorded system metrics remain public because the current dashboard reads them; changing that contract is deferred to a later API/security stage. Swagger, ReDoc, and OpenAPI also remain enabled until the production HTTP surface is implemented and tested.
 
 ## Celery reliability and schedule policy
 
-The current Celery configuration has no `acks_late`, worker-lost rejection, explicit retry policy, prefetch policy, or task time limits. HTTP task endpoints currently use FastAPI `BackgroundTasks` rather than publishing Celery messages. A `202` therefore confirms local scheduling only. The system does not claim exactly-once or guaranteed delivery.
+Authenticated operational endpoints for KPI refresh, demo generation/cleanup, cache cleanup, system metric recording, meta-cache update, and health email publish Celery messages. Their `202` response means accepted for asynchronous execution and contains a task ID; it does not mean completed. The authenticated status endpoint returns only `PENDING`, `STARTED`, `SUCCESS`, or `FAILURE` and never returns task results, exceptions, or tracebacks. Broker/backend failures return controlled HTTP 503 responses.
 
-A later stage will move operational HTTP work that promises durable execution to Celery and return a task identifier. It will still document at-least-once and loss/duplication boundaries rather than claiming exactly-once semantics.
+Cache warmup remains an explicit best-effort API-local action because running it in a worker would restore a worker-to-API network dependency. SQLite snapshots remain a direct local-development function and have no hosted task endpoint or schedule. Schema migrations, demo seeding, and PostgreSQL backup remain explicit deployment or administration procedures.
 
-The initial hosted Beat policy will review only these candidates for enablement:
+Celery uses late acknowledgements, rejects work when a worker is lost, tracks started tasks, and limits prefetch to one. This gives at-least-once-like behavior: a task can execute more than once after worker or broker failure. Exactly-once execution is not claimed. Broad retries and task time limits are omitted because the operations do not yet have measured duration and transient-failure contracts.
+
+The enabled Beat schedule contains only:
 
 - KPI refresh;
 - system metrics recording;
 - cache cleanup.
 
-These schedules will remain disabled initially:
+These schedules are disabled:
 
 - demo generation;
 - demo cleanup;
@@ -169,7 +171,19 @@ These schedules will remain disabled initially:
 - API cache warmup;
 - obsolete SQLite backup.
 
-The existing code schedule remains unchanged until that review is implemented.
+Idempotency classification is:
+
+| Operation | Classification | Initial policy |
+| --- | --- | --- |
+| Cache cleanup | Idempotent | Scheduled and API-triggerable |
+| KPI refresh | Mostly idempotent upsert | Scheduled and API-triggerable; duplicate delivery may repeat computation |
+| System metrics | Not idempotent; each run appends telemetry | Scheduled; duplicate rows are acceptable operational telemetry |
+| Meta-cache update | Idempotent | API-triggerable only |
+| Demo cleanup | Mostly idempotent | API-triggerable only |
+| Demo generation | Not idempotent | API-triggerable only and never scheduled |
+| Health email | Not idempotent | API-triggerable only and never scheduled |
+| API cache warmup | Best-effort | API-local only and never scheduled |
+| SQLite snapshot | Not a hosted backup | Local manual use only |
 
 ## Image delivery
 
@@ -200,9 +214,9 @@ docker compose --env-file .env.vm -f deploy/compose.vm.yml up -d
 curl --fail http://127.0.0.1:8000/api/health/z
 ```
 
-The API binds to localhost. A reviewed TLS reverse proxy must preserve application paths. The optional worker profile still combines worker and Beat, uses concurrency 1, and must remain a single instance.
+The API and metrics listener bind to localhost. A reviewed TLS reverse proxy must preserve application paths and must not publish port 9090. The optional worker profile starts one concurrency-1 worker and one separate Beat scheduler. Keep exactly one Beat instance.
 
-Enable that current combined process only when its schedule has been reviewed:
+Enable the worker and Beat processes with:
 
 ```bash
 docker compose --env-file .env.vm -f deploy/compose.vm.yml --profile worker up -d

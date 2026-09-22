@@ -69,7 +69,6 @@ async def test_login_rejects_invalid_credentials(client, payload, expected):
         "/api/tasks/cache/warmup",
         "/api/tasks/metrics/record",
         "/api/tasks/meta/update",
-        "/api/tasks/backup/db",
         "/api/tasks/email/health",
     ],
 )

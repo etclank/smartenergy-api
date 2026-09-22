@@ -14,12 +14,12 @@ def test_setup_logging_dev(monkeypatch, tmp_path):
 
 
 def test_setup_logging_prod(monkeypatch, tmp_path):
-    """Prod environment → JSON serialize mode."""
+    """Hosted logging uses structured stdout without a file sink."""
     monkeypatch.setenv("ENV", "prod")
     monkeypatch.setenv("LOG_LEVEL", "DEBUG")
     monkeypatch.chdir(tmp_path)
-    lg.setup_logging()
-    assert (tmp_path / "logs" / "app.log").exists()
+    lg.setup_logging("worker")
+    assert not (tmp_path / "logs").exists()
 
 
 def test_serialize_includes_trace(monkeypatch):

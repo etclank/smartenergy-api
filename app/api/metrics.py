@@ -1,20 +1,15 @@
 # app/api/metrics.py
-"""
-Prometheus-compatible metrics endpoint for SmartEnergy API.
-Collects request latency, status counts, and cache statistics.
-Safe for reloads (avoids duplicate timeseries registration).
-"""
+"""Prometheus metrics and the API process's private metrics listener."""
+
+from threading import Thread
+from wsgiref.simple_server import WSGIServer
 
 from prometheus_client import (
     Counter,
     Histogram,
-    generate_latest,
-    CONTENT_TYPE_LATEST,
     REGISTRY,
+    start_http_server,
 )
-from fastapi import APIRouter, Response
-
-router = APIRouter(prefix="/metrics", tags=["metrics"])
 
 
 # --- Prevent duplicate registration ---
@@ -50,9 +45,13 @@ if not _metric_exists("cache_misses_total"):
     CACHE_MISSES = Counter("cache_misses_total", "Number of cache misses", ["endpoint"])
 
 
-@router.get("", include_in_schema=False)
-@router.get("/", summary="Prometheus metrics")
-async def metrics_endpoint() -> Response:
-    """Return all metrics in Prometheus exposition format."""
-    data = generate_latest()
-    return Response(data, media_type=CONTENT_TYPE_LATEST)
+def start_metrics_server(host: str, port: int) -> tuple[WSGIServer, Thread]:
+    """Start the private Prometheus listener for the API process."""
+    return start_http_server(port, addr=host)
+
+
+def stop_metrics_server(server: WSGIServer, thread: Thread) -> None:
+    """Stop a metrics listener created by :func:`start_metrics_server`."""
+    server.shutdown()
+    server.server_close()
+    thread.join(timeout=5)

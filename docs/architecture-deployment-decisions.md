@@ -1,6 +1,6 @@
 # Architecture and Deployment Decisions
 
-Status: approved design for the hosted SmartEnergy deployment. D1 is implemented in application tooling; its Kubernetes migration Job remains future work. Unless a section says otherwise, the remaining decisions describe planned work and are not claims about the current implementation.
+Status: approved design for the hosted SmartEnergy deployment. D1, D2, D3, D5, and D13 are implemented in application tooling; their production Kubernetes wiring remains future work. Unless a section says otherwise, the remaining decisions describe planned work.
 
 ## D1 — Versioned schema lifecycle
 
@@ -13,7 +13,7 @@ Status: approved design for the hosted SmartEnergy deployment. D1 is implemented
 ## D2 — Private metrics listener
 
 - **Decision:** Serve Prometheus metrics privately on TCP 9090; application HTTP remains on TCP 8000.
-- **Context:** `/api/metrics` currently shares the public application listener.
+- **Context:** `/api/metrics` has been removed; the API lifecycle now owns a separate listener on TCP 9090.
 - **Reason:** Project 1 scrapes a private port, and application ingress should not expose operational metrics.
 - **Trade-off:** The API process owns a second listener and Service port.
 - **Reconsider when:** A separate metrics process or sidecar has a measured operational benefit.
@@ -21,7 +21,7 @@ Status: approved design for the hosted SmartEnergy deployment. D1 is implemented
 ## D3 — Kubernetes logging
 
 - **Decision:** Emit structured JSON on stdout/stderr and disable file logging in Kubernetes.
-- **Context:** Current local logging also writes `/app/logs`.
+- **Context:** `ENV=prod` now emits role-labelled JSON only to stdout/stderr; local development retains file logging.
 - **Reason:** Container streams provide the platform log boundary and simplify a read-only root filesystem.
 - **Trade-off:** Pods retain no rotated application log files.
 - **Reconsider when:** The platform adopts a supported file-based log collection contract.
@@ -37,7 +37,7 @@ Status: approved design for the hosted SmartEnergy deployment. D1 is implemented
 ## D5 — Durable operational dispatch
 
 - **Decision:** HTTP operations that promise durable execution will enqueue Celery and return a task identifier.
-- **Context:** Current HTTP task endpoints use in-process FastAPI `BackgroundTasks`; API termination loses unfinished work.
+- **Context:** Durable HTTP task endpoints now enqueue Celery work and return task IDs. Explicit cache warmup remains documented best-effort API-local work.
 - **Reason:** Accepted operational work needs a durable broker boundary and observable identity.
 - **Trade-off:** Those endpoints depend on Redis/Celery and need explicit failure semantics.
 - **Reconsider when:** An operation is deliberately documented as best-effort and safe to lose.
@@ -77,7 +77,7 @@ Status: approved design for the hosted SmartEnergy deployment. D1 is implemented
 ## D10 — Initial public surface
 
 - **Decision:** Expose the dashboard, intended demo read APIs, login, and minimal health. Keep Prometheus metrics and system metrics private, and disable Swagger, ReDoc, and OpenAPI initially.
-- **Context:** Current routes expose documentation and both metrics surfaces on the main listener.
+- **Context:** Prometheus now uses its private listener; recorded system metrics and API documentation remain on the application listener pending the production HTTP-surface stage.
 - **Reason:** The first hosted release should have a small, deliberate public boundary.
 - **Trade-off:** Interactive API documentation is not initially available as public portfolio evidence.
 - **Reconsider when:** The operational API has been reviewed and public documentation adds clear portfolio value.
@@ -100,8 +100,8 @@ Status: approved design for the hosted SmartEnergy deployment. D1 is implemented
 
 ## D13 — Initial Beat policy
 
-- **Decision:** Review KPI refresh, system metrics, and cache cleanup as initial candidates. Keep demo generation, demo cleanup, email, API cache warmup, and SQLite backup disabled initially.
-- **Context:** The current code-based schedule enables every task, including automatic data mutation and an ineffective PostgreSQL backup task.
+- **Decision:** Enable only KPI refresh, system metrics, and cache cleanup initially. Keep demo generation, demo cleanup, email, API cache warmup, and SQLite backup disabled.
+- **Context:** The default code schedule now contains only KPI refresh, system metrics recording, and cache cleanup.
 - **Reason:** Initial hosted behavior should be predictable and limited to understood operations.
 - **Trade-off:** Some demonstration automation remains inactive.
 - **Reconsider when:** Each task is idempotent, operationally justified, and covered by failure/recovery tests.
