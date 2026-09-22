@@ -7,3 +7,6 @@ resources:
   - allow-prometheus-ingress.yaml
   - allow-postgres-egress.yaml
   - allow-redis-egress.yaml
+  - allow-postgres-ingress.yaml
+  - allow-redis-ingress.yaml
+  - allow-backup-object-storage-egress.yaml

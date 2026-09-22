@@ -2,6 +2,8 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: smartenergy-beat
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
   labels:
     app.kubernetes.io/name: smartenergy
     app.kubernetes.io/component: beat
@@ -42,6 +44,11 @@ spec:
           env:
             - name: ROLE
               value: beat
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: smartenergy-postgres
+                  key: DATABASE_URL
             - name: REDIS_URL
               valueFrom:
                 secretKeyRef:
@@ -60,10 +67,10 @@ spec:
           resources:
             requests:
               cpu: 10m
-              memory: 48Mi
+              memory: 96Mi
             limits:
               cpu: 50m
-              memory: 96Mi
+              memory: 128Mi
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true

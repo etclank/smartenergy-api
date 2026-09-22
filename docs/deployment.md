@@ -11,10 +11,10 @@ The repository currently provides:
 - a local Compose stack with PostgreSQL 16, a one-shot Alembic migration service, Redis 7, the API, a concurrency-1 Celery worker, and a separate Beat scheduler;
 - a runtime-only VM Compose file with optional separate worker and Beat services;
 - one digest-pinned, multi-stage application image used by the API, worker, Beat, and migration command;
-- a production Kustomize package containing the API, worker, Beat, migration, private Service, network boundaries, Ingress, TLS Certificate, and middleware;
+- a production Kustomize package containing the API, worker, Beat, PostgreSQL, Redis, migration, backup, private Services, network boundaries, Ingress, TLS Certificate, and middleware;
 - CI validation that can publish a full-SHA-tagged GHCR image with digest metadata, SBOM, and provenance after all quality gates pass.
 
-[`deploy/kubernetes/overlays/production`](../deploy/kubernetes/overlays/production/) is the application-owned production package. Stage 5 will add PostgreSQL, Redis, persistent storage, and backups. Project 1 still owns the Namespace, ResourceQuota, AppProject, and eventual Argo CD Application.
+[`deploy/kubernetes/overlays/production`](../deploy/kubernetes/overlays/production/) is the complete application-owned production package, including PostgreSQL, Redis, persistent claims, and backup. Project 1 still owns the Namespace, ResourceQuota, AppProject, and eventual Argo CD Application.
 
 ## Project 1 hosting contract
 
@@ -39,7 +39,7 @@ Runtime Secret values remain outside Git. At minimum, the hosted application wil
 
 The local and VM Compose definitions run API, worker, and Beat as separate processes. Exactly one Beat process is a deployment invariant.
 
-The hosted design will use:
+The hosted package uses:
 
 | Role | Responsibility |
 | --- | --- |
@@ -55,7 +55,7 @@ Beat stores non-authoritative schedule state at `/tmp/celerybeat-schedule`; it d
 
 Alembic now owns schema evolution. The API startup script starts Uvicorn without `create_all`, direct DDL, migrations, or seeding. `scripts/init_db.py` remains an explicit helper that creates the current schema only for a new disposable local SQLite database; it rejects PostgreSQL and does not evolve existing tables or seed data.
 
-The hosted lifecycle will be:
+The hosted lifecycle is:
 
 ```text
 database available
@@ -93,19 +93,19 @@ The probe contract is:
 - readiness: a bounded PostgreSQL `SELECT 1`, returning HTTP 503 on failure;
 - Redis: informational health only, because API reads fall back to PostgreSQL.
 
-Application HTTP remains on TCP 8000. The API process starts and stops a separate Prometheus listener on TCP 9090 with its FastAPI lifespan. `/api/metrics` no longer exists. The later Service may expose 9090 privately, but Ingress must not route it.
+Application HTTP remains on TCP 8000. The API process starts and stops a separate Prometheus listener on TCP 9090 with its FastAPI lifespan. `/api/metrics` no longer exists. The Service exposes 9090 privately, and Ingress does not route it.
 
 ## Logging and writable paths
 
 Local development retains readable console and file output. With `ENV=prod`, API, worker, and Beat emit role-labelled structured JSON to stdout/stderr and never create `/app/logs`. Beat writes only its ephemeral state under `/tmp`; hosted roles do not create SQLite or backup files during normal operation.
 
-The application image runs as UID/GID 10001, keeps application files read-only, and needs only writable `/tmp` storage for ephemeral state. This contract has been exercised locally with a read-only root filesystem. PostgreSQL and Redis require their own persistent data mounts. Their exact image UIDs, security contexts, and writable paths must be validated under the platform's restricted Pod Security Admission policy before live deployment.
+The application image runs as UID/GID 10001, keeps application files read-only, and needs only writable `/tmp` storage for ephemeral state. PostgreSQL and Redis use their upstream UID/GID 999, read-only roots, and persistent data mounts. Fresh-volume initialization and remounts passed the platform's restricted Pod Security Admission contract in disposable Kubernetes.
 
-## PostgreSQL and Redis targets
+## PostgreSQL and Redis
 
-The PostgreSQL target is version 16, one StatefulSet replica, and an approximately 5 GiB `local-path` PVC. It is intentionally non-HA. The exact digest-pinned image and security context remain subject to restricted-PSA testing on a fresh volume.
+PostgreSQL uses `postgres:16.15-bookworm@sha256:efedf3595f1d6f415c08568ba171029bf54052e754cc9f030e3f2412b21f3d67`, one StatefulSet replica, and a 5 GiB `local-path` PVC. `PGDATA` is a child of the mounted volume so UID 999 can create and own it without a root init container. `/var/run/postgresql` and `/tmp` are bounded `emptyDir` volumes. Startup, readiness, and conservative liveness use `pg_isready`.
 
-One authenticated Redis 7 instance will minimize resource use. It will use one StatefulSet replica, AOF persistence, an approximately 1 GiB `local-path` PVC, and these logical databases:
+Redis uses `redis:7.4.11-bookworm@sha256:c6eabf748fc7a61dbb5a705c78bcf3d6377b1127a97d0ce965c11c44ba46896f`, one authenticated StatefulSet replica, and a 1 GiB `local-path` PVC. A temporary mode-0600 configuration keeps the password out of command arguments. `appendonly yes` and `appendfsync everysec` persist these logical databases:
 
 | Logical database | Responsibility |
 | --- | --- |
@@ -113,22 +113,15 @@ One authenticated Redis 7 instance will minimize resource use. It will use one S
 | DB 1 | Celery broker |
 | DB 2 | Celery result backend |
 
-This is also intentionally non-HA. Redis loss degrades API caching but affects Celery delivery and result handling more directly.
+Both services are intentionally non-HA. A PVC survives ordinary Pod replacement, but local-path data remains tied to one node. PVC deletion or node loss loses the local data. PostgreSQL therefore requires off-node backup; a PVC is not a backup. Redis AOF narrows the normal crash-loss window to roughly one second, but cannot guarantee exactly-once Celery delivery or prevent application-level duplicate work.
 
 ## Backup and restore
 
-The current task only copies local SQLite files. For PostgreSQL it returns `skip`; it is not a PostgreSQL backup.
+`CronJob/smartenergy-postgres-backup` runs daily at 02:30 UTC with `concurrencyPolicy: Forbid`. Its pinned PostgreSQL 16.15 init container runs `pg_dump -Fc`; a pinned `curlimages/curl:8.22.0@sha256:58adaa4e8dca9c988bae2aba4ab3434a0bb2da16bbe3f92dec39ec7785166777` container performs an AWS SigV4 HTTPS PUT. Object keys contain the UTC date, timestamp, application revision, and Alembic revision. Upload failure exits non-zero and leaves PostgreSQL unchanged.
 
-The hosted backup contract is:
+The off-node administrator must provide `BACKUP_ENDPOINT`, `BACKUP_BUCKET`, `BACKUP_ACCESS_KEY`, `BACKUP_SECRET_KEY`, and `BACKUP_REGION` in `smartenergy-backup`. The endpoint must be HTTPS and support path-style S3 requests. Configure the object-store lifecycle for seven daily and four weekly recovery points; deletion automation is deliberately outside the application until a provider is selected.
 
-- `pg_dump -Fc` daily;
-- upload to off-node storage;
-- retain seven daily and four weekly recovery points;
-- use `concurrencyPolicy: Forbid`;
-- report failures through Kubernetes Job status;
-- validate `pg_restore` into a disposable database before closeout.
-
-The destination, credentials, compatible PostgreSQL client image, CronJob, and restore runbook will be implemented later.
+Restore is always explicit. Select an object and a new database name, create the temporary `smartenergy-restore-request` Secret with `BACKUP_OBJECT_KEY`, `TARGET_DATABASE`, and `CONFIRM_RESTORE=restore:<target>`, then submit [`operations/restore-job.yaml`](../deploy/kubernetes/operations/restore-job.yaml). The Job refuses an existing database, downloads the selected object, runs `pg_restore --exit-on-error`, and validates the Alembic revision. [`scripts/restore_postgres.sh`](../scripts/restore_postgres.sh) provides the equivalent guarded admin-host flow when `curl`, `psql`, `createdb`, and `pg_restore` are installed. After restore, point a temporary API instance at the restored database and verify readiness plus representative responses before any cutover. Never direct either restore method at the active database name.
 
 ## Public exposure target
 
@@ -200,7 +193,7 @@ On a push to `main`, CI runs application and integration tests, builds and smoke
 
 The current production reference is `ghcr.io/etclank/smartenergy-api@sha256:7a35d14461bd6ee81bf67cf09bef792c866ad7673add9077e7b770e5fff99792`. GHCR visibility is public, so no image pull Secret is required.
 
-The Python base is pinned as a readable tag plus multi-platform digest in `docker/Dockerfile`. To update it, inspect the current upstream manifest with `docker buildx imagetools inspect python:3.13-slim`, replace the verified digest in both the build argument and OCI base label, then rebuild and repeat the test and read-only smoke suites. Alembic uses the Python PostgreSQL drivers and does not need `psql`; the main image therefore omits `postgresql-client`. Stage 5 should use a separate digest-pinned PostgreSQL backup image for `pg_dump`.
+The Python base is pinned as a readable tag plus multi-platform digest in `docker/Dockerfile`. To update it, inspect the current upstream manifest with `docker buildx imagetools inspect python:3.13-slim`, replace the verified digest in both the build argument and OCI base label, then rebuild and repeat the test and read-only smoke suites. Alembic uses Python PostgreSQL drivers and does not need `psql`; the main image therefore omits PostgreSQL clients. Backup and restore use the separately pinned official PostgreSQL image for `pg_dump` and `pg_restore`.
 
 The image-level Docker healthcheck calls `/api/health/z` for local Docker and Compose operation. It does not define future Kubernetes liveness or readiness probes; those will be configured explicitly in the Kubernetes workload.
 
@@ -247,23 +240,25 @@ Required external Secret contracts are:
 | Secret | Required keys |
 | --- | --- |
 | `smartenergy-runtime` | `JWT_SECRET` |
-| `smartenergy-postgres` | `DATABASE_URL` |
-| `smartenergy-redis` | `REDIS_URL`, `CELERY_BROKER_URL`, `CELERY_RESULT_BACKEND` |
-| `smartenergy-backup` | Reserved for Stage 5; contract not yet consumed |
+| `smartenergy-postgres` | `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, `DATABASE_URL` |
+| `smartenergy-redis` | `REDIS_PASSWORD`, `REDIS_URL`, `CELERY_BROKER_URL`, `CELERY_RESULT_BACKEND` |
+| `smartenergy-backup` | `BACKUP_ENDPOINT`, `BACKUP_BUCKET`, `BACKUP_ACCESS_KEY`, `BACKUP_SECRET_KEY`, `BACKUP_REGION` |
 
-The API requests `50m/128Mi` and limits `250m/256Mi`; the worker requests `50m/128Mi` and limits `300m/256Mi`; Beat requests `10m/48Mi` and limits `50m/96Mi`; migration requests `25m/96Mi` and limits `150m/192Mi`. API uses a no-surge rollout, accepting single-replica downtime to limit temporary memory. Worker and singleton Beat use `Recreate`; a worker restart can redeliver work under late acknowledgements.
+`DATABASE_URL` must use `smartenergy-postgres:5432`; percent-encode credentials where required. The Redis URLs use the same `REDIS_PASSWORD` and select DB 0 for API cache, DB 1 for the Celery broker, and DB 2 for results. Secret values are provisioned outside Git.
 
-Every Pod runs as UID/GID 10001 with RuntimeDefault seccomp, all capabilities dropped, privilege escalation disabled, service-account token automount disabled, a read-only root, and only a size-limited `/tmp` `emptyDir`. `/api/health/z` is startup/liveness; `/api/health/readyz` checks PostgreSQL readiness without making Redis a readiness dependency.
+The API requests `50m/128Mi` and limits `250m/256Mi`; the worker requests `50m/128Mi` and limits `300m/256Mi`; Beat requests `10m/96Mi` and limits `50m/128Mi`; PostgreSQL requests `75m/192Mi` and limits `300m/384Mi`; Redis requests `25m/48Mi` and limits `100m/96Mi`. Migration and backup each use an effective `25m/96Mi` request and `150m/192Mi` limit. Beat's memory was raised after its disposable-cluster working set measured about 80 MiB. API uses a no-surge rollout, accepting single-replica downtime to limit temporary memory. Worker and singleton Beat use `Recreate`; a worker restart can redeliver work under late acknowledgements.
 
-The migration is an Argo CD `PreSync` hook with a fixed name, a source-revision annotation, and `BeforeHookCreation`. A failed migration blocks the sync and remains available for diagnosis. The next manually admitted release removes the previous Job immediately before creating its replacement, preventing permanent buildup while retaining evidence between releases.
+Application Pods run as UID/GID 10001; PostgreSQL and Redis run as UID/GID 999; backup containers use their image identities 999 and 100/101. Every Pod uses RuntimeDefault seccomp, drops all capabilities, disables privilege escalation and service-account token automount, and has a read-only root. Only bounded temporary paths and declared persistent data paths are writable. `/api/health/z` is startup/liveness; `/api/health/readyz` checks PostgreSQL readiness without making Redis a readiness dependency.
 
-Default-deny ingress and egress apply to all package Pods. DNS is limited to CoreDNS UDP/TCP 53. Traefik may reach API TCP 8000, and Prometheus may reach metrics TCP 9090, using their exact platform identities. Application roles may reach only the stable Stage 5 PostgreSQL label on TCP 5432 and Redis label on TCP 6379. No unrestricted internet or TCP 443 egress exists; SendGrid and OTLP remain disabled.
+Stateful Services and StatefulSets use sync wave `-2`. Migration is an Argo CD `Sync` hook at wave `-1`, with a fixed name, source-revision annotation, and `BeforeHookCreation`. A failed migration blocks wave `0` application workloads and remains available for diagnosis. API, worker, and Beat use wave `0`; backup and Ingress use wave `1`. This preserves the order: externally provisioned Secrets, PostgreSQL and Redis, migration, application roles, then public routing and scheduled backup.
+
+Default-deny ingress and egress apply to all package Pods. DNS is limited to CoreDNS UDP/TCP 53. PostgreSQL accepts TCP 5432 only from API, worker, migration, and backup identities. Redis accepts TCP 6379 only from API, worker, and Beat. Beat receives `DATABASE_URL` because Celery imports database-backed task modules, but policy still denies Beat-to-PostgreSQL traffic. Traefik may reach API TCP 8000, and Prometheus may reach metrics TCP 9090. Only backup-labelled Pods receive outbound TCP 443, excluding private, loopback, link-local, shared-address, and metadata ranges; other roles have no internet egress. SendGrid and OTLP remain disabled.
 
 Ingress uses Traefik, permanent HTTPS redirect, documentation-path blocking, and rate limiting at five requests per second with a burst of ten. Cert-manager writes `smartenergy-tls` using the existing `letsencrypt-production` ClusterIssuer. These values match the current platform convention and keep metrics outside public routing.
 
-The rendered package fits the Project 1 quota including the reserved Stage 5 budget: steady state is `210m/1000m` CPU and `544Mi/1088Mi` memory; with migration it is `235m/1150m` and `640Mi/1280Mi`. Stage 5 must retain the tested label and resource reservation contracts.
+The measured final package fits Project 1 quota. Steady state is `210m/1000m` CPU and `592Mi/1120Mi` memory. With either migration or backup it is `235m/1150m` and `688Mi/1312Mi`; releases should not be admitted during the 02:30 UTC backup window. Five steady Pods plus one transient Job remain below the 12-Pod quota. PostgreSQL 5 GiB plus Redis 1 GiB uses two PVCs and 6 GiB, leaving one PVC and 6 GiB of quota.
 
-Do not apply this overlay directly. After Stage 5 validation, Project 1 will add a commit-pinned Argo Application and the Prometheus discovery edge, followed by manual sync. Live DNS also remains separate.
+Do not apply this overlay directly. Project 1 must first provision the four Secret contracts and off-node lifecycle policy. It will then add a commit-pinned Argo Application and the Prometheus discovery edge, followed by manual sync. Live DNS also remains separate.
 
 ## Capacity and rollout
 

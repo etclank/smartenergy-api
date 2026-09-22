@@ -4,5 +4,8 @@ resources:
   - api
   - worker
   - beat
+  - postgres
+  - redis
   - migration
+  - backup
   - network-policies

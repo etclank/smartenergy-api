@@ -1,0 +1,25 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-postgres-ingress
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: smartenergy-postgres
+      app.kubernetes.io/component: database
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchExpressions:
+              - key: app.kubernetes.io/component
+                operator: In
+                values:
+                  - api
+                  - worker
+                  - migration
+                  - backup
+      ports:
+        - protocol: TCP
+          port: 5432

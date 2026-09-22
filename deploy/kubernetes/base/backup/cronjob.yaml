@@ -1,0 +1,174 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: smartenergy-postgres-backup
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+  labels:
+    app.kubernetes.io/name: smartenergy-postgres-backup
+    app.kubernetes.io/component: backup
+    app.kubernetes.io/part-of: smartenergy
+spec:
+  schedule: "30 2 * * *"
+  timeZone: Etc/UTC
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      activeDeadlineSeconds: 900
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: smartenergy-postgres-backup
+            app.kubernetes.io/component: backup
+            app.kubernetes.io/part-of: smartenergy
+        spec:
+          restartPolicy: Never
+          automountServiceAccountToken: false
+          securityContext:
+            runAsNonRoot: true
+            fsGroup: 2000
+            fsGroupChangePolicy: OnRootMismatch
+            seccompProfile:
+              type: RuntimeDefault
+          initContainers:
+            - name: dump
+              image: postgres:16.15-bookworm@sha256:efedf3595f1d6f415c08568ba171029bf54052e754cc9f030e3f2412b21f3d67
+              imagePullPolicy: IfNotPresent
+              command:
+                - /bin/sh
+                - -ec
+              args:
+                - |
+                  umask 007
+                  timestamp="$(date -u +%Y%m%dT%H%M%SZ)"
+                  alembic_revision="$(psql -Atqc 'SELECT version_num FROM alembic_version LIMIT 1')"
+                  test -n "$alembic_revision"
+                  object_key="smartenergy/$(date -u +%Y/%m/%d)/${timestamp}-${APPLICATION_REVISION}-${alembic_revision}.dump"
+                  dump_file="/backup/database.dump"
+                  pg_dump --format=custom --file="$dump_file"
+                  test -s "$dump_file"
+                  printf '%s' "$object_key" > /backup/object-key
+              env:
+                - name: PGHOST
+                  value: smartenergy-postgres
+                - name: PGPORT
+                  value: "5432"
+                - name: PGDATABASE
+                  valueFrom:
+                    secretKeyRef:
+                      name: smartenergy-postgres
+                      key: POSTGRES_DB
+                - name: PGUSER
+                  valueFrom:
+                    secretKeyRef:
+                      name: smartenergy-postgres
+                      key: POSTGRES_USER
+                - name: PGPASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: smartenergy-postgres
+                      key: POSTGRES_PASSWORD
+                - name: APPLICATION_REVISION
+                  value: 1cbe7dd0991b1495dfabdd08a69a00755c5961aa
+              resources:
+                requests:
+                  cpu: 25m
+                  memory: 96Mi
+                limits:
+                  cpu: 150m
+                  memory: 192Mi
+              securityContext:
+                runAsUser: 999
+                runAsGroup: 999
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities:
+                  drop:
+                    - ALL
+              volumeMounts:
+                - name: backup
+                  mountPath: /backup
+                - name: tmp
+                  mountPath: /tmp
+          containers:
+            - name: upload
+              image: curlimages/curl:8.22.0@sha256:58adaa4e8dca9c988bae2aba4ab3434a0bb2da16bbe3f92dec39ec7785166777
+              imagePullPolicy: IfNotPresent
+              command:
+                - /bin/sh
+                - -ec
+              args:
+                - |
+                  test -s /backup/database.dump
+                  object_key="$(cat /backup/object-key)"
+                  case "$BACKUP_ENDPOINT" in
+                    https://*) ;;
+                    *) echo 'BACKUP_ENDPOINT must use HTTPS' >&2; exit 64 ;;
+                  esac
+                  umask 077
+                  {
+                    printf 'url = "%s/%s/%s"\n' "${BACKUP_ENDPOINT%/}" "$BACKUP_BUCKET" "$object_key"
+                    printf 'aws-sigv4 = "aws:amz:%s:s3"\n' "$BACKUP_REGION"
+                    printf 'user = "%s:%s"\n' "$BACKUP_ACCESS_KEY" "$BACKUP_SECRET_KEY"
+                    printf 'upload-file = "/backup/database.dump"\n'
+                    printf 'fail-with-body\nshow-error\nsilent\nconnect-timeout = 15\nmax-time = 300\n'
+                  } > /tmp/curl.conf
+                  trap 'rm -f /tmp/curl.conf' EXIT
+                  curl --config /tmp/curl.conf
+                  rm -f /backup/database.dump /backup/object-key
+              env:
+                - name: BACKUP_ENDPOINT
+                  valueFrom:
+                    secretKeyRef:
+                      name: smartenergy-backup
+                      key: BACKUP_ENDPOINT
+                - name: BACKUP_BUCKET
+                  valueFrom:
+                    secretKeyRef:
+                      name: smartenergy-backup
+                      key: BACKUP_BUCKET
+                - name: BACKUP_ACCESS_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: smartenergy-backup
+                      key: BACKUP_ACCESS_KEY
+                - name: BACKUP_SECRET_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: smartenergy-backup
+                      key: BACKUP_SECRET_KEY
+                - name: BACKUP_REGION
+                  valueFrom:
+                    secretKeyRef:
+                      name: smartenergy-backup
+                      key: BACKUP_REGION
+              resources:
+                requests:
+                  cpu: 10m
+                  memory: 32Mi
+                limits:
+                  cpu: 50m
+                  memory: 64Mi
+              securityContext:
+                runAsUser: 100
+                runAsGroup: 101
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities:
+                  drop:
+                    - ALL
+              volumeMounts:
+                - name: backup
+                  mountPath: /backup
+                - name: tmp
+                  mountPath: /tmp
+          volumes:
+            - name: backup
+              emptyDir:
+                sizeLimit: 1Gi
+            - name: tmp
+              emptyDir:
+                sizeLimit: 16Mi

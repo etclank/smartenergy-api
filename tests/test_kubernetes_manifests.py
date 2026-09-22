@@ -1,5 +1,6 @@
 from functools import lru_cache
 from pathlib import Path
+import re
 import subprocess
 
 import yaml
@@ -7,9 +8,22 @@ import yaml
 
 ROOT = Path(__file__).parents[1]
 OVERLAY = ROOT / "deploy" / "kubernetes" / "overlays" / "production"
+RESTORE_JOB = ROOT / "deploy" / "kubernetes" / "operations" / "restore-job.yaml"
 IMAGE = (
     "ghcr.io/etclank/smartenergy-api@"
     "sha256:7a35d14461bd6ee81bf67cf09bef792c866ad7673add9077e7b770e5fff99792"
+)
+POSTGRES_IMAGE = (
+    "postgres:16.15-bookworm@"
+    "sha256:efedf3595f1d6f415c08568ba171029bf54052e754cc9f030e3f2412b21f3d67"
+)
+REDIS_IMAGE = (
+    "redis:7.4.11-bookworm@"
+    "sha256:c6eabf748fc7a61dbb5a705c78bcf3d6377b1127a97d0ce965c11c44ba46896f"
+)
+CURL_IMAGE = (
+    "curlimages/curl:8.22.0@"
+    "sha256:58adaa4e8dca9c988bae2aba4ab3434a0bb2da16bbe3f92dec39ec7785166777"
 )
 REVISION = "1cbe7dd0991b1495dfabdd08a69a00755c5961aa"
 
@@ -40,13 +54,18 @@ def by_kind_name(kind: str, name: str) -> dict:
 
 
 def pod_spec(resource: dict) -> dict:
-    if resource["kind"] == "Deployment":
-        return resource["spec"]["template"]["spec"]
+    if resource["kind"] == "CronJob":
+        return resource["spec"]["jobTemplate"]["spec"]["template"]["spec"]
     return resource["spec"]["template"]["spec"]
 
 
 def container(resource: dict) -> dict:
     return pod_spec(resource)["containers"][0]
+
+
+def all_containers(resource: dict) -> list[dict]:
+    spec = pod_spec(resource)
+    return [*spec.get("initContainers", []), *spec.get("containers", [])]
 
 
 def env_map(resource: dict) -> dict[str, dict]:
@@ -63,6 +82,17 @@ def memory_mebibytes(value: str) -> int:
     return int(value.removesuffix("Mi"))
 
 
+def scalar_values(value: object):
+    if isinstance(value, dict):
+        for child in value.values():
+            yield from scalar_values(child)
+    elif isinstance(value, list):
+        for child in value:
+            yield from scalar_values(child)
+    else:
+        yield value
+
+
 def test_render_is_deterministic_complete_and_namespaced() -> None:
     second = subprocess.run(
         ["kubectl", "kustomize", str(OVERLAY)],
@@ -73,7 +103,11 @@ def test_render_is_deterministic_complete_and_namespaced() -> None:
     ).stdout
     assert rendered_text() == second
     assert "replace-me" not in rendered_text()
-    assert "${" not in rendered_text()
+    assert not any(
+        isinstance(value, str) and re.fullmatch(r"\$\{[A-Z][A-Z0-9_]*\}", value)
+        for resource in resources()
+        for value in scalar_values(resource)
+    )
 
     identities = [
         (resource["apiVersion"], resource["kind"], resource["metadata"]["name"])
@@ -112,6 +146,21 @@ def test_all_application_roles_use_the_verified_digest() -> None:
     assert all(":latest" not in container(workload)["image"] for workload in workloads)
 
 
+def test_every_production_container_uses_an_immutable_image() -> None:
+    workloads = [
+        resource
+        for resource in resources()
+        if resource["kind"] in {"Deployment", "StatefulSet", "Job", "CronJob"}
+    ]
+    images = {
+        runtime["image"]
+        for workload in workloads
+        for runtime in all_containers(workload)
+    }
+    assert images == {IMAGE, POSTGRES_IMAGE, REDIS_IMAGE, CURL_IMAGE}
+    assert all("@sha256:" in image for image in images)
+
+
 def test_runtime_roles_and_rollouts() -> None:
     api = by_kind_name("Deployment", "smartenergy-api")
     worker = by_kind_name("Deployment", "smartenergy-worker")
@@ -120,6 +169,10 @@ def test_runtime_roles_and_rollouts() -> None:
     assert env_map(api)["ROLE"]["value"] == "web"
     assert env_map(worker)["ROLE"]["value"] == "worker"
     assert env_map(beat)["ROLE"]["value"] == "beat"
+    assert env_map(beat)["DATABASE_URL"]["valueFrom"]["secretKeyRef"] == {
+        "name": "smartenergy-postgres",
+        "key": "DATABASE_URL",
+    }
     assert api["spec"]["strategy"] == {
         "type": "RollingUpdate",
         "rollingUpdate": {"maxSurge": 0, "maxUnavailable": 1},
@@ -169,7 +222,7 @@ def test_resources_match_budget_and_leave_stage5_headroom() -> None:
     expected = {
         "smartenergy-api": (50, 250, 128, 256),
         "smartenergy-worker": (50, 300, 128, 256),
-        "smartenergy-beat": (10, 50, 48, 96),
+        "smartenergy-beat": (10, 50, 96, 128),
         "smartenergy-migration": (25, 150, 96, 192),
     }
     measured: dict[str, tuple[int, int, int, int]] = {}
@@ -204,12 +257,68 @@ def test_resources_match_budget_and_leave_stage5_headroom() -> None:
         eventual_steady[index] + measured["smartenergy-migration"][index]
         for index in range(4)
     )
-    assert eventual_steady == (210, 1000, 544, 1088)
-    assert eventual_with_migration == (235, 1150, 640, 1280)
+    assert eventual_steady == (210, 1000, 592, 1120)
+    assert eventual_with_migration == (235, 1150, 688, 1312)
     assert eventual_with_migration[0] <= 500
     assert eventual_with_migration[1] <= 1500
     assert eventual_with_migration[2] <= 896
     assert eventual_with_migration[3] <= 1536
+
+
+def test_final_quota_and_pvc_budget() -> None:
+    steady_names = {
+        "smartenergy-api",
+        "smartenergy-worker",
+        "smartenergy-beat",
+        "smartenergy-postgres",
+        "smartenergy-redis",
+    }
+    measured: dict[str, tuple[int, int, int, int]] = {}
+    for workload in [
+        resource
+        for resource in resources()
+        if resource["kind"] in {"Deployment", "StatefulSet"}
+    ]:
+        values = container(workload)["resources"]
+        measured[workload["metadata"]["name"]] = (
+            cpu_millicores(values["requests"]["cpu"]),
+            cpu_millicores(values["limits"]["cpu"]),
+            memory_mebibytes(values["requests"]["memory"]),
+            memory_mebibytes(values["limits"]["memory"]),
+        )
+    assert set(measured) == steady_names
+    steady = tuple(
+        sum(values[index] for values in measured.values()) for index in range(4)
+    )
+    assert steady == (210, 1000, 592, 1120)
+
+    transient = (25, 150, 96, 192)
+    with_one_job = tuple(steady[index] + transient[index] for index in range(4))
+    assert with_one_job == (235, 1150, 688, 1312)
+    assert all(
+        actual <= limit
+        for actual, limit in zip(with_one_job, (500, 1500, 896, 1536), strict=True)
+    )
+    assert len(steady_names) + 1 <= 12
+
+    claims = [
+        claim
+        for workload in resources()
+        if workload["kind"] == "StatefulSet"
+        for claim in workload["spec"]["volumeClaimTemplates"]
+    ]
+    assert len(claims) == 2
+    assert {claim["spec"]["resources"]["requests"]["storage"] for claim in claims} == {
+        "1Gi",
+        "5Gi",
+    }
+    assert (
+        sum(
+            int(claim["spec"]["resources"]["requests"]["storage"][:-2])
+            for claim in claims
+        )
+        == 6
+    )
 
 
 def test_api_ports_and_probes() -> None:
@@ -240,11 +349,154 @@ def test_api_ports_and_probes() -> None:
     }
 
 
-def test_migration_job_is_a_diagnosable_presync_hook() -> None:
+def test_postgres_stateful_contract() -> None:
+    postgres = by_kind_name("StatefulSet", "smartenergy-postgres")
+    spec = pod_spec(postgres)
+    runtime = container(postgres)
+    assert postgres["spec"]["replicas"] == 1
+    assert postgres["spec"]["serviceName"] == "smartenergy-postgres"
+    assert runtime["image"] == POSTGRES_IMAGE
+    assert runtime["resources"] == {
+        "requests": {"cpu": "75m", "memory": "192Mi"},
+        "limits": {"cpu": "300m", "memory": "384Mi"},
+    }
+    assert env_map(postgres)["PGDATA"]["value"] == "/var/lib/postgresql/data/pgdata"
+    assert set(env_map(postgres)) == {
+        "PGDATA",
+        "POSTGRES_DB",
+        "POSTGRES_USER",
+        "POSTGRES_PASSWORD",
+    }
+    assert all(
+        "pg_isready" in probe["exec"]["command"][-1]
+        for probe in (
+            runtime["startupProbe"],
+            runtime["readinessProbe"],
+            runtime["livenessProbe"],
+        )
+    )
+    claim = postgres["spec"]["volumeClaimTemplates"][0]
+    assert claim["metadata"]["name"] == "data"
+    assert claim["spec"]["storageClassName"] == "local-path"
+    assert claim["spec"]["resources"]["requests"]["storage"] == "5Gi"
+    assert spec["securityContext"]["runAsUser"] == 999
+    assert spec["securityContext"]["runAsGroup"] == 999
+    assert spec["securityContext"]["fsGroup"] == 999
+
+    service = by_kind_name("Service", "smartenergy-postgres")
+    assert service["spec"]["type"] == "ClusterIP"
+    assert service["spec"]["ports"] == [
+        {"name": "postgres", "port": 5432, "targetPort": "postgres", "protocol": "TCP"}
+    ]
+
+
+def test_redis_stateful_contract() -> None:
+    redis = by_kind_name("StatefulSet", "smartenergy-redis")
+    spec = pod_spec(redis)
+    runtime = container(redis)
+    script = runtime["args"][0]
+    assert redis["spec"]["replicas"] == 1
+    assert redis["spec"]["serviceName"] == "smartenergy-redis"
+    assert runtime["image"] == REDIS_IMAGE
+    assert runtime["resources"] == {
+        "requests": {"cpu": "25m", "memory": "48Mi"},
+        "limits": {"cpu": "100m", "memory": "96Mi"},
+    }
+    assert "appendonly yes" in script
+    assert "appendfsync everysec" in script
+    assert "requirepass %s" in script
+    assert "$REDIS_PASSWORD" in script
+    assert set(env_map(redis)) == {"REDIS_PASSWORD", "REDISCLI_AUTH"}
+    claim = redis["spec"]["volumeClaimTemplates"][0]
+    assert claim["spec"]["storageClassName"] == "local-path"
+    assert claim["spec"]["resources"]["requests"]["storage"] == "1Gi"
+    assert spec["securityContext"]["runAsUser"] == 999
+    assert spec["securityContext"]["runAsGroup"] == 999
+    assert spec["securityContext"]["fsGroup"] == 999
+
+    service = by_kind_name("Service", "smartenergy-redis")
+    assert service["spec"]["type"] == "ClusterIP"
+    assert service["spec"]["ports"] == [
+        {"name": "redis", "port": 6379, "targetPort": "redis", "protocol": "TCP"}
+    ]
+
+
+def test_stateful_and_backup_restricted_security() -> None:
+    workloads = [
+        by_kind_name("StatefulSet", "smartenergy-postgres"),
+        by_kind_name("StatefulSet", "smartenergy-redis"),
+        by_kind_name("CronJob", "smartenergy-postgres-backup"),
+    ]
+    for workload in workloads:
+        spec = pod_spec(workload)
+        assert spec["automountServiceAccountToken"] is False
+        assert spec["securityContext"]["runAsNonRoot"] is True
+        assert spec["securityContext"]["seccompProfile"] == {"type": "RuntimeDefault"}
+        for runtime in all_containers(workload):
+            security = runtime["securityContext"]
+            assert security["allowPrivilegeEscalation"] is False
+            assert security["readOnlyRootFilesystem"] is True
+            assert security["capabilities"] == {"drop": ["ALL"]}
+
+
+def test_backup_cronjob_contract() -> None:
+    backup = by_kind_name("CronJob", "smartenergy-postgres-backup")
+    assert backup["spec"]["schedule"] == "30 2 * * *"
+    assert backup["spec"]["timeZone"] == "Etc/UTC"
+    assert backup["spec"]["concurrencyPolicy"] == "Forbid"
+    spec = pod_spec(backup)
+    dump, upload = all_containers(backup)
+    assert dump["image"] == POSTGRES_IMAGE
+    assert upload["image"] == CURL_IMAGE
+    assert "pg_dump --format=custom" in dump["args"][0]
+    assert "alembic_version" in dump["args"][0]
+    assert "curl --config /tmp/curl.conf" in upload["args"][0]
+    assert "fail-with-body" in upload["args"][0]
+    assert dump["resources"] == {
+        "requests": {"cpu": "25m", "memory": "96Mi"},
+        "limits": {"cpu": "150m", "memory": "192Mi"},
+    }
+    assert upload["resources"] == {
+        "requests": {"cpu": "10m", "memory": "32Mi"},
+        "limits": {"cpu": "50m", "memory": "64Mi"},
+    }
+    assert spec["restartPolicy"] == "Never"
+    assert not any(
+        resource["kind"] == "Service"
+        and resource["metadata"]["name"] == "smartenergy-postgres-backup"
+        for resource in resources()
+    )
+
+
+def test_restore_job_is_explicit_safe_and_excluded_from_production() -> None:
+    restore = yaml.safe_load(RESTORE_JOB.read_text())
+    assert restore["metadata"]["generateName"] == "smartenergy-postgres-restore-"
+    assert restore["spec"]["backoffLimit"] == 0
+    dump, restore_runtime = all_containers(restore)
+    assert dump["image"] == CURL_IMAGE
+    assert restore_runtime["image"] == POSTGRES_IMAGE
+    assert "BACKUP_OBJECT_KEY" in {entry["name"] for entry in dump["env"]}
+    assert (
+        "target database already exists; refusing overwrite"
+        in restore_runtime["args"][0]
+    )
+    assert (
+        'test "$CONFIRM_RESTORE" = "restore:$TARGET_DATABASE"'
+        in restore_runtime["args"][0]
+    )
+    assert not any(
+        resource["kind"] == "Job"
+        and resource["metadata"].get("generateName") == "smartenergy-postgres-restore-"
+        for resource in resources()
+    )
+
+
+def test_migration_job_is_a_diagnosable_sync_hook() -> None:
     migration = by_kind_name("Job", "smartenergy-migration")
     annotations = migration["metadata"]["annotations"]
-    assert annotations["argocd.argoproj.io/hook"] == "PreSync"
+    assert annotations["argocd.argoproj.io/hook"] == "Sync"
     assert annotations["argocd.argoproj.io/hook-delete-policy"] == "BeforeHookCreation"
+    assert annotations["argocd.argoproj.io/sync-wave"] == "-1"
     assert annotations["smartenergy.eoghanclancy.eu/revision"] == REVISION
     assert container(migration)["command"] == ["alembic", "upgrade", "head"]
     assert set(env_map(migration)) == {"DATABASE_URL"}
@@ -274,28 +526,42 @@ def test_config_and_secret_references_match_documented_contract() -> None:
     }
     contract = {
         "smartenergy-runtime": {"JWT_SECRET"},
-        "smartenergy-postgres": {"DATABASE_URL"},
+        "smartenergy-postgres": {
+            "DATABASE_URL",
+            "POSTGRES_DB",
+            "POSTGRES_USER",
+            "POSTGRES_PASSWORD",
+        },
         "smartenergy-redis": {
             "REDIS_URL",
             "CELERY_BROKER_URL",
             "CELERY_RESULT_BACKEND",
+            "REDIS_PASSWORD",
+        },
+        "smartenergy-backup": {
+            "BACKUP_ENDPOINT",
+            "BACKUP_BUCKET",
+            "BACKUP_ACCESS_KEY",
+            "BACKUP_SECRET_KEY",
+            "BACKUP_REGION",
         },
     }
     references: dict[str, set[str]] = {name: set() for name in contract}
     for workload in [
         resource
         for resource in resources()
-        if resource["kind"] in {"Deployment", "Job"}
+        if resource["kind"] in {"Deployment", "StatefulSet", "Job", "CronJob"}
     ]:
-        for source in container(workload).get("envFrom", []):
-            assert source == {"configMapRef": {"name": "smartenergy-config"}}
-        for entry in env_map(workload).values():
-            if "valueFrom" not in entry:
-                continue
-            reference = entry["valueFrom"]["secretKeyRef"]
-            assert reference["name"] in contract
-            assert reference["key"] in contract[reference["name"]]
-            references[reference["name"]].add(reference["key"])
+        for runtime in all_containers(workload):
+            for source in runtime.get("envFrom", []):
+                assert source == {"configMapRef": {"name": "smartenergy-config"}}
+            for entry in runtime.get("env", []):
+                if "valueFrom" not in entry:
+                    continue
+                reference = entry["valueFrom"]["secretKeyRef"]
+                assert reference["name"] in contract
+                assert reference["key"] in contract[reference["name"]]
+                references[reference["name"]].add(reference["key"])
     assert references == contract
 
 
@@ -352,7 +618,27 @@ def test_stateful_egress_contracts_are_exact() -> None:
         "app.kubernetes.io/component": "cache",
     }
     assert redis["egress"][0]["ports"] == [{"protocol": "TCP", "port": 6379}]
-    assert "0.0.0.0/0" not in rendered_text()
+
+
+def test_stateful_ingress_and_backup_egress_are_exact() -> None:
+    postgres = by_kind_name("NetworkPolicy", "allow-postgres-ingress")["spec"]
+    redis = by_kind_name("NetworkPolicy", "allow-redis-ingress")["spec"]
+    assert postgres["ingress"][0]["from"][0]["podSelector"]["matchExpressions"][0][
+        "values"
+    ] == ["api", "worker", "migration", "backup"]
+    assert postgres["ingress"][0]["ports"] == [{"protocol": "TCP", "port": 5432}]
+    assert redis["ingress"][0]["from"][0]["podSelector"]["matchExpressions"][0][
+        "values"
+    ] == ["api", "worker", "beat"]
+    assert redis["ingress"][0]["ports"] == [{"protocol": "TCP", "port": 6379}]
+
+    backup = by_kind_name("NetworkPolicy", "allow-backup-object-storage-egress")["spec"]
+    assert backup["podSelector"]["matchLabels"] == {
+        "app.kubernetes.io/component": "backup"
+    }
+    assert backup["egress"][0]["ports"] == [{"protocol": "TCP", "port": 443}]
+    assert backup["egress"][0]["to"][0]["ipBlock"]["cidr"] == "0.0.0.0/0"
+    assert rendered_text().count("cidr: 0.0.0.0/0") == 1
 
 
 def test_public_ingress_tls_and_middleware_contract() -> None:

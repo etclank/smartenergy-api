@@ -1,0 +1,20 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: smartenergy-postgres
+  annotations:
+    argocd.argoproj.io/sync-wave: "-2"
+  labels:
+    app.kubernetes.io/name: smartenergy-postgres
+    app.kubernetes.io/component: database
+    app.kubernetes.io/part-of: smartenergy
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: smartenergy-postgres
+    app.kubernetes.io/component: database
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: postgres
+      protocol: TCP

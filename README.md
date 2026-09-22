@@ -57,7 +57,7 @@ This diagram describes the application today. The local Compose stack runs Postg
 
 Durable HTTP task endpoints enqueue Celery messages and return a task ID. A `202` means accepted by the broker, not completed. Explicit cache warmup remains best-effort work in the API process. Database migration, demo seeding and PostgreSQL backup are not task API operations.
 
-The runtime separates the API, concurrency-1 Celery worker, and single Celery Beat scheduler. The production Kustomize package also defines a release migration Job; PostgreSQL, Redis, and backup resources remain Stage 5 work. See the [architecture and deployment decisions](docs/architecture-deployment-decisions.md) for the stable design record.
+The runtime separates the API, concurrency-1 Celery worker, and single Celery Beat scheduler. The production Kustomize package also defines PostgreSQL and Redis StatefulSets, a release migration Job, and daily off-node PostgreSQL backup. See the [architecture and deployment decisions](docs/architecture-deployment-decisions.md) for the stable design record.
 
 ## Configuration
 
@@ -219,9 +219,9 @@ The same image can run on a Docker VM or a Kubernetes cluster. The dashboard is 
 - [`deploy/kubernetes/overlays/production`](deploy/kubernetes/overlays/production): digest-pinned production configuration, Ingress, Certificate, and Traefik middleware.
 - [Limitations](#limitations): current application and reliability boundaries.
 
-PostgreSQL and Redis are provisioned separately; these runtime examples do not create database storage or backups. The existing root `docker-compose.yml` remains the local development stack.
+The VM example expects PostgreSQL, Redis, and backup operations to be provisioned separately. The Kubernetes production overlay owns their single-replica stateful resources and backup CronJob. The existing root `docker-compose.yml` remains the local development stack.
 
-SmartEnergy is ready for later onboarding to the Cloud-Native Service Control Plane through its GitOps/Kustomize application route. The application-owned production package is implemented, but PostgreSQL, Redis, backups, the Project 1 `Application/smartenergy`, DNS, and live deployment are still pending. No SmartEnergy workload is deployed. Render it with `kubectl kustomize deploy/kubernetes/overlays/production`.
+SmartEnergy is ready for later onboarding to the Cloud-Native Service Control Plane through its GitOps/Kustomize application route. The application-owned package includes the stateless and stateful layers, but runtime Secrets, off-node object storage, the Project 1 `Application/smartenergy`, DNS, and live deployment are still pending. No SmartEnergy workload is deployed. Render it with `kubectl kustomize deploy/kubernetes/overlays/production`.
 
 ## Limitations
 
@@ -231,6 +231,7 @@ This project remains a demonstration application:
 - No zero-downtime multi-version migration guarantee, broad pagination or concurrency guarantees for scheduled aggregates/seeding. Run one Beat scheduler.
 - Celery uses late acknowledgements, worker-lost rejection and prefetch 1. Delivery remains at-least-once-like and duplicate execution is possible; exactly-once is not claimed. Broad retries and arbitrary task time limits are intentionally absent.
 - The snapshot task supports local SQLite file copies only; it is not a consistent online-backup solution and does not back up PostgreSQL. Configure provider backups separately.
+- Kubernetes PostgreSQL and Redis each use one local-path replica. PVCs survive Pod replacement but remain tied to one node; PostgreSQL recovery depends on tested off-node backups, and Redis AOF does not provide exactly-once Celery delivery.
 - Recorded system metrics remain public for the current dashboard, while Prometheus metrics are private on TCP 9090. Metrics persistence failures can be tolerated silently; do not treat them as an availability guarantee.
 - Some tests share fixture data; deprecation warnings remain in the existing date/time and client code. Managed-service integration and load testing are outside the unit suite.
 - Dependencies are locked for reproducibility; that is not a vulnerability-free guarantee. Update and audit them before deployment.

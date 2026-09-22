@@ -1,0 +1,24 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-redis-ingress
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: smartenergy-redis
+      app.kubernetes.io/component: cache
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchExpressions:
+              - key: app.kubernetes.io/component
+                operator: In
+                values:
+                  - api
+                  - worker
+                  - beat
+      ports:
+        - protocol: TCP
+          port: 6379

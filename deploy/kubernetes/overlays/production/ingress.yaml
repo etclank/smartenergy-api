@@ -7,6 +7,7 @@ metadata:
     app.kubernetes.io/component: api
     app.kubernetes.io/part-of: smartenergy
   annotations:
+    argocd.argoproj.io/sync-wave: "1"
     traefik.ingress.kubernetes.io/router.entrypoints: web,websecure
     traefik.ingress.kubernetes.io/router.middlewares: smartenergy-redirect-https@kubernetescrd,smartenergy-disable-api-docs@kubernetescrd,smartenergy-rate-limit@kubernetescrd
 spec:

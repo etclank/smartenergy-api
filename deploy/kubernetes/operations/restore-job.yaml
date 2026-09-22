@@ -1,0 +1,170 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  generateName: smartenergy-postgres-restore-
+  namespace: smartenergy
+  labels:
+    app.kubernetes.io/name: smartenergy-postgres-restore
+    app.kubernetes.io/component: backup
+    app.kubernetes.io/part-of: smartenergy
+spec:
+  backoffLimit: 0
+  activeDeadlineSeconds: 900
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: smartenergy-postgres-restore
+        app.kubernetes.io/component: backup
+        app.kubernetes.io/part-of: smartenergy
+    spec:
+      restartPolicy: Never
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        fsGroup: 2000
+        fsGroupChangePolicy: OnRootMismatch
+        seccompProfile:
+          type: RuntimeDefault
+      initContainers:
+        - name: download
+          image: curlimages/curl:8.22.0@sha256:58adaa4e8dca9c988bae2aba4ab3434a0bb2da16bbe3f92dec39ec7785166777
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/sh", "-ec"]
+          args:
+            - |
+              case "$BACKUP_ENDPOINT" in
+                https://*) ;;
+                *) echo 'BACKUP_ENDPOINT must use HTTPS' >&2; exit 64 ;;
+              esac
+              umask 007
+              {
+                printf 'url = "%s/%s/%s"\n' "${BACKUP_ENDPOINT%/}" "$BACKUP_BUCKET" "$BACKUP_OBJECT_KEY"
+                printf 'aws-sigv4 = "aws:amz:%s:s3"\n' "$BACKUP_REGION"
+                printf 'user = "%s:%s"\n' "$BACKUP_ACCESS_KEY" "$BACKUP_SECRET_KEY"
+                printf 'output = "/restore/database.dump"\n'
+                printf 'fail-with-body\nshow-error\nsilent\nconnect-timeout = 15\nmax-time = 300\n'
+              } > /tmp/curl.conf
+              curl --config /tmp/curl.conf
+              test -s /restore/database.dump
+          env:
+            - name: BACKUP_ENDPOINT
+              valueFrom:
+                secretKeyRef:
+                  name: smartenergy-backup
+                  key: BACKUP_ENDPOINT
+            - name: BACKUP_BUCKET
+              valueFrom:
+                secretKeyRef:
+                  name: smartenergy-backup
+                  key: BACKUP_BUCKET
+            - name: BACKUP_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: smartenergy-backup
+                  key: BACKUP_ACCESS_KEY
+            - name: BACKUP_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: smartenergy-backup
+                  key: BACKUP_SECRET_KEY
+            - name: BACKUP_REGION
+              valueFrom:
+                secretKeyRef:
+                  name: smartenergy-backup
+                  key: BACKUP_REGION
+            - name: BACKUP_OBJECT_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: smartenergy-restore-request
+                  key: BACKUP_OBJECT_KEY
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              cpu: 50m
+              memory: 64Mi
+          securityContext:
+            runAsUser: 100
+            runAsGroup: 101
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: restore
+              mountPath: /restore
+            - name: tmp
+              mountPath: /tmp
+      containers:
+        - name: restore
+          image: postgres:16.15-bookworm@sha256:efedf3595f1d6f415c08568ba171029bf54052e754cc9f030e3f2412b21f3d67
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/sh", "-ec"]
+          args:
+            - |
+              test "$CONFIRM_RESTORE" = "restore:$TARGET_DATABASE"
+              case "$TARGET_DATABASE" in
+                *[!a-zA-Z0-9_]*) echo 'invalid target database' >&2; exit 64 ;;
+              esac
+              if psql --dbname=postgres -Atqc "SELECT 1 FROM pg_database WHERE datname = '$TARGET_DATABASE'" | grep -q 1; then
+                echo 'target database already exists; refusing overwrite' >&2
+                exit 73
+              fi
+              createdb --maintenance-db=postgres "$TARGET_DATABASE"
+              pg_restore --exit-on-error --no-owner --no-privileges --dbname="$TARGET_DATABASE" /restore/database.dump
+              restored_revision="$(psql --dbname="$TARGET_DATABASE" -Atqc 'SELECT version_num FROM alembic_version LIMIT 1')"
+              test -n "$restored_revision"
+              printf 'restore complete: database=%s alembic_revision=%s\n' "$TARGET_DATABASE" "$restored_revision"
+          env:
+            - name: PGHOST
+              value: smartenergy-postgres
+            - name: PGPORT
+              value: "5432"
+            - name: PGUSER
+              valueFrom:
+                secretKeyRef:
+                  name: smartenergy-postgres
+                  key: POSTGRES_USER
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: smartenergy-postgres
+                  key: POSTGRES_PASSWORD
+            - name: TARGET_DATABASE
+              valueFrom:
+                secretKeyRef:
+                  name: smartenergy-restore-request
+                  key: TARGET_DATABASE
+            - name: CONFIRM_RESTORE
+              valueFrom:
+                secretKeyRef:
+                  name: smartenergy-restore-request
+                  key: CONFIRM_RESTORE
+          resources:
+            requests:
+              cpu: 25m
+              memory: 96Mi
+            limits:
+              cpu: 150m
+              memory: 192Mi
+          securityContext:
+            runAsUser: 999
+            runAsGroup: 999
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: restore
+              mountPath: /restore
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: restore
+          emptyDir:
+            sizeLimit: 1Gi
+        - name: tmp
+          emptyDir:
+            sizeLimit: 16Mi

@@ -1,0 +1,135 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: smartenergy-redis
+  annotations:
+    argocd.argoproj.io/sync-wave: "-2"
+  labels:
+    app.kubernetes.io/name: smartenergy-redis
+    app.kubernetes.io/component: cache
+    app.kubernetes.io/part-of: smartenergy
+spec:
+  serviceName: smartenergy-redis
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: smartenergy-redis
+      app.kubernetes.io/component: cache
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: smartenergy-redis
+        app.kubernetes.io/component: cache
+        app.kubernetes.io/part-of: smartenergy
+    spec:
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 30
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999
+        runAsGroup: 999
+        fsGroup: 999
+        fsGroupChangePolicy: OnRootMismatch
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: redis
+          image: redis:7.4.11-bookworm@sha256:c6eabf748fc7a61dbb5a705c78bcf3d6377b1127a97d0ce965c11c44ba46896f
+          imagePullPolicy: IfNotPresent
+          command:
+            - /bin/sh
+            - -ec
+          args:
+            - |
+              umask 077
+              {
+                printf 'bind 0.0.0.0\n'
+                printf 'protected-mode yes\n'
+                printf 'port 6379\n'
+                printf 'dir /data\n'
+                printf 'appendonly yes\n'
+                printf 'appendfsync everysec\n'
+                printf 'requirepass %s\n' "$REDIS_PASSWORD"
+              } > /tmp/redis.conf
+              exec redis-server /tmp/redis.conf
+          ports:
+            - name: redis
+              containerPort: 6379
+              protocol: TCP
+          env:
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: smartenergy-redis
+                  key: REDIS_PASSWORD
+            - name: REDISCLI_AUTH
+              valueFrom:
+                secretKeyRef:
+                  name: smartenergy-redis
+                  key: REDIS_PASSWORD
+          resources:
+            requests:
+              cpu: 25m
+              memory: 48Mi
+            limits:
+              cpu: 100m
+              memory: 96Mi
+          startupProbe:
+            exec:
+              command:
+                - redis-cli
+                - -h
+                - 127.0.0.1
+                - ping
+            periodSeconds: 3
+            timeoutSeconds: 2
+            failureThreshold: 30
+          readinessProbe:
+            exec:
+              command:
+                - redis-cli
+                - -h
+                - 127.0.0.1
+                - ping
+            periodSeconds: 10
+            timeoutSeconds: 2
+            failureThreshold: 3
+          livenessProbe:
+            exec:
+              command:
+                - redis-cli
+                - -h
+                - 127.0.0.1
+                - ping
+            periodSeconds: 30
+            timeoutSeconds: 3
+            failureThreshold: 5
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          volumeMounts:
+            - name: data
+              mountPath: /data
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir:
+            sizeLimit: 16Mi
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+        labels:
+          app.kubernetes.io/name: smartenergy-redis
+          app.kubernetes.io/component: cache
+          app.kubernetes.io/part-of: smartenergy
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        storageClassName: local-path
+        resources:
+          requests:
+            storage: 1Gi

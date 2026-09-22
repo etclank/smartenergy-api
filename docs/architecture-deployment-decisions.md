@@ -1,6 +1,6 @@
 # Architecture and Deployment Decisions
 
-Status: approved design for the hosted SmartEnergy deployment. The stateless production Kubernetes package is implemented; stateful services, backups, Project 1 admission, and live deployment remain future work.
+Status: approved design for the hosted SmartEnergy deployment. The application-owned stateless, stateful, migration, backup, and restore package is implemented; Project 1 admission and live deployment remain future work.
 
 ## D1 — Versioned schema lifecycle
 
@@ -45,23 +45,23 @@ Status: approved design for the hosted SmartEnergy deployment. The stateless pro
 ## D6 — One Redis instance
 
 - **Decision:** Use one authenticated Redis instance with AOF and logical DB separation: DB 0 cache, DB 1 broker, DB 2 result backend.
-- **Context:** The small single-node platform has a strict resource budget, and current configuration already uses those logical roles.
+- **Context:** The production package now runs one authenticated Redis 7.4.11 StatefulSet with `appendonly yes`, `appendfsync everysec`, a 1 GiB local-path PVC, and those logical roles.
 - **Reason:** One instance demonstrates cache and Celery integration without unnecessary memory overhead.
 - **Trade-off:** Cache and task infrastructure share a non-HA failure domain.
 - **Reconsider when:** Measured reliability or workload isolation requires separate instances.
 
 ## D7 — PostgreSQL image validation
 
-- **Decision:** Use PostgreSQL 16 only after its digest-pinned image, UID, writable paths, and approximately 5 GiB PVC have passed restricted-PSA testing.
-- **Context:** Official image startup and volume ownership may assume root-time initialization.
+- **Decision:** Use the official PostgreSQL 16.15 Bookworm image by immutable digest, fixed UID/GID 999, and a 5 GiB local-path PVC.
+- **Context:** Fresh initialization and restart with existing data passed restricted PSA using a writable `PGDATA` subdirectory, socket `emptyDir`, and read-only root.
 - **Reason:** A manifest that passes policy but cannot initialize a fresh volume is not deployable.
 - **Trade-off:** Stateful packaging requires a disposable-cluster validation stage.
 - **Reconsider when:** A supported non-root image contract removes the uncertainty.
 
 ## D8 — Redis image validation
 
-- **Decision:** Use Redis 7 only after its digest-pinned image, UID, AOF path, authentication, and approximately 1 GiB PVC have passed restricted-PSA testing.
-- **Context:** Entrypoint ownership behavior and read-only-root compatibility vary by image.
+- **Decision:** Use the official Redis 7.4.11 Bookworm image by immutable digest, fixed UID/GID 999, authenticated AOF, and a 1 GiB local-path PVC.
+- **Context:** Fresh initialization, AOF creation, authentication, and restart recovery passed restricted PSA with only `/data` and `/tmp` writable.
 - **Reason:** Authentication and persistence must work without weakening namespace policy.
 - **Trade-off:** Stateful packaging requires another image-specific test.
 - **Reconsider when:** A supported non-root image contract removes the uncertainty.
@@ -69,7 +69,7 @@ Status: approved design for the hosted SmartEnergy deployment. The stateless pro
 ## D9 — PostgreSQL backup contract
 
 - **Decision:** Run daily off-node `pg_dump -Fc` backups, retaining seven daily and four weekly recovery points, and validate restore.
-- **Context:** The current backup task only copies SQLite files and skips PostgreSQL.
+- **Context:** A daily CronJob now creates a custom-format dump with the PostgreSQL 16 client and uploads it to S3-compatible HTTPS storage using a separate pinned curl image. A guarded restore Job template and admin script were exercised against a clean database.
 - **Reason:** Local-path storage is tied to one node and needs independently recoverable data.
 - **Trade-off:** The deployment needs storage credentials, retention handling, and restore exercises.
 - **Reconsider when:** Another low-cost mechanism proves equivalent off-node recovery and portability.
