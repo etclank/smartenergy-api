@@ -617,6 +617,37 @@ def test_ingress_identity_policies_are_port_scoped() -> None:
     assert prometheus_rule["ports"] == [{"protocol": "TCP", "port": 9090}]
 
 
+def test_cert_manager_http01_solver_ingress_is_exact() -> None:
+    solver = by_kind_name(
+        "NetworkPolicy", "allow-traefik-cert-manager-http01-solver-ingress"
+    )["spec"]
+    assert solver == {
+        "podSelector": {"matchLabels": {"acme.cert-manager.io/http01-solver": "true"}},
+        "policyTypes": ["Ingress"],
+        "ingress": [
+            {
+                "from": [
+                    {
+                        "namespaceSelector": {
+                            "matchLabels": {
+                                "kubernetes.io/metadata.name": "kube-system"
+                            }
+                        },
+                        "podSelector": {
+                            "matchLabels": {
+                                "app.kubernetes.io/name": "traefik",
+                                "app.kubernetes.io/instance": "traefik-kube-system",
+                            }
+                        },
+                    }
+                ],
+                "ports": [{"protocol": "TCP", "port": 8089}],
+            }
+        ],
+    }
+    assert not any(port in str(solver) for port in ("8000", "9090", "5432", "6379"))
+
+
 def test_stateful_egress_contracts_are_exact() -> None:
     postgres = by_kind_name("NetworkPolicy", "allow-postgres-egress")["spec"]
     redis = by_kind_name("NetworkPolicy", "allow-redis-egress")["spec"]

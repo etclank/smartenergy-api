@@ -4,6 +4,7 @@ resources:
   - default-deny.yaml
   - allow-dns-egress.yaml
   - allow-traefik-ingress.yaml
+  - cert-manager-http01-solver-ingress.yaml
   - allow-prometheus-ingress.yaml
   - allow-postgres-egress.yaml
   - allow-redis-egress.yaml
