@@ -54,6 +54,12 @@ Beat stores non-authoritative schedule state at `/tmp/celerybeat-schedule`; it d
 
 Alembic now owns schema evolution. The API startup script starts Uvicorn without `create_all`, direct DDL, migrations, or seeding. `scripts/init_db.py` remains an explicit helper that creates the current schema only for a new disposable local SQLite database; it rejects PostgreSQL and does not evolve existing tables or seed data.
 
+### One-time portfolio demo backfill
+
+`python -m scripts.backfill_demo_90d` is an explicit operator command for adding the portfolio dataset after migrations. It is not called by application startup or Celery Beat. The command creates three demo sites, six meters, tariffs, 90 days of hourly readings, daily maximum-power values, and daily KPI summaries with a local deterministic seed. Its newest reading is the last completed UTC hour.
+
+Run it only from the reviewed application image as a restricted one-time Job with the normal PostgreSQL and Redis Secret references. It writes only when all application domain tables are empty. An exact complete rerun returns `NOOP`; partial demo data, mixed data, or unrelated application data returns `BLOCKED` without changing the database. Creation uses one database transaction. After commit it removes only `cache:*` Redis keys and does not flush Redis or touch the Celery broker and result databases.
+
 The hosted lifecycle is:
 
 ```text
