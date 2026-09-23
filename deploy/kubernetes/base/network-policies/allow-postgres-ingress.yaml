@@ -19,7 +19,6 @@ spec:
                   - api
                   - worker
                   - migration
-                  - backup
       ports:
         - protocol: TCP
           port: 5432

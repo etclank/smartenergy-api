@@ -9,6 +9,9 @@ import yaml
 ROOT = Path(__file__).parents[1]
 OVERLAY = ROOT / "deploy" / "kubernetes" / "overlays" / "production"
 RESTORE_JOB = ROOT / "deploy" / "kubernetes" / "operations" / "restore-job.yaml"
+BACKUP_CRONJOB = (
+    ROOT / "deploy" / "kubernetes" / "operations" / "backup" / "cronjob.yaml"
+)
 IMAGE = (
     "ghcr.io/etclank/smartenergy-api@"
     "sha256:b9ed2c1be78d707f234df14e08679204a5249def787d0b8e26f398cce41e415f"
@@ -106,6 +109,7 @@ def test_render_is_deterministic_complete_and_namespaced() -> None:
         check=True,
     ).stdout
     assert rendered_text() == second
+    assert len(resources()) == 24
     assert "replace-me" not in rendered_text()
     assert not any(
         isinstance(value, str) and re.fullmatch(r"\$\{[A-Z][A-Z0-9_]*\}", value)
@@ -163,7 +167,7 @@ def test_every_production_container_uses_an_immutable_image() -> None:
         for workload in workloads
         for runtime in all_containers(workload)
     }
-    assert images == {IMAGE, POSTGRES_IMAGE, REDIS_IMAGE, CURL_IMAGE}
+    assert images == {IMAGE, POSTGRES_IMAGE, REDIS_IMAGE}
     assert all("@sha256:" in image for image in images)
 
 
@@ -427,11 +431,10 @@ def test_redis_stateful_contract() -> None:
     ]
 
 
-def test_stateful_and_backup_restricted_security() -> None:
+def test_stateful_restricted_security() -> None:
     workloads = [
         by_kind_name("StatefulSet", "smartenergy-postgres"),
         by_kind_name("StatefulSet", "smartenergy-redis"),
-        by_kind_name("CronJob", "smartenergy-postgres-backup"),
     ]
     for workload in workloads:
         spec = pod_spec(workload)
@@ -445,8 +448,8 @@ def test_stateful_and_backup_restricted_security() -> None:
             assert security["capabilities"] == {"drop": ["ALL"]}
 
 
-def test_backup_cronjob_contract() -> None:
-    backup = by_kind_name("CronJob", "smartenergy-postgres-backup")
+def test_optional_backup_template_is_safe_and_excluded_from_production() -> None:
+    backup = yaml.safe_load(BACKUP_CRONJOB.read_text())
     assert backup["spec"]["schedule"] == "30 2 * * *"
     assert backup["spec"]["timeZone"] == "Etc/UTC"
     assert backup["spec"]["concurrencyPolicy"] == "Forbid"
@@ -471,7 +474,7 @@ def test_backup_cronjob_contract() -> None:
     }
     assert spec["restartPolicy"] == "Never"
     assert not any(
-        resource["kind"] == "Service"
+        resource["kind"] == "CronJob"
         and resource["metadata"]["name"] == "smartenergy-postgres-backup"
         for resource in resources()
     )
@@ -549,13 +552,6 @@ def test_config_and_secret_references_match_documented_contract() -> None:
             "CELERY_BROKER_URL",
             "CELERY_RESULT_BACKEND",
             "REDIS_PASSWORD",
-        },
-        "smartenergy-backup": {
-            "BACKUP_ENDPOINT",
-            "BACKUP_BUCKET",
-            "BACKUP_ACCESS_KEY",
-            "BACKUP_SECRET_KEY",
-            "BACKUP_REGION",
         },
     }
     references: dict[str, set[str]] = {name: set() for name in contract}
@@ -663,25 +659,28 @@ def test_stateful_egress_contracts_are_exact() -> None:
     assert redis["egress"][0]["ports"] == [{"protocol": "TCP", "port": 6379}]
 
 
-def test_stateful_ingress_and_backup_egress_are_exact() -> None:
+def test_stateful_ingress_contracts_are_exact() -> None:
     postgres = by_kind_name("NetworkPolicy", "allow-postgres-ingress")["spec"]
     redis = by_kind_name("NetworkPolicy", "allow-redis-ingress")["spec"]
     assert postgres["ingress"][0]["from"][0]["podSelector"]["matchExpressions"][0][
         "values"
-    ] == ["api", "worker", "migration", "backup"]
+    ] == ["api", "worker", "migration"]
     assert postgres["ingress"][0]["ports"] == [{"protocol": "TCP", "port": 5432}]
     assert redis["ingress"][0]["from"][0]["podSelector"]["matchExpressions"][0][
         "values"
     ] == ["api", "worker", "beat"]
     assert redis["ingress"][0]["ports"] == [{"protocol": "TCP", "port": 6379}]
 
-    backup = by_kind_name("NetworkPolicy", "allow-backup-object-storage-egress")["spec"]
-    assert backup["podSelector"]["matchLabels"] == {
-        "app.kubernetes.io/component": "backup"
+    assert "cidr: 0.0.0.0/0" not in rendered_text()
+
+
+def test_backup_resources_are_excluded_from_production() -> None:
+    identities = {
+        (resource["kind"], resource["metadata"]["name"]) for resource in resources()
     }
-    assert backup["egress"][0]["ports"] == [{"protocol": "TCP", "port": 443}]
-    assert backup["egress"][0]["to"][0]["ipBlock"]["cidr"] == "0.0.0.0/0"
-    assert rendered_text().count("cidr: 0.0.0.0/0") == 1
+    assert ("CronJob", "smartenergy-postgres-backup") not in identities
+    assert ("NetworkPolicy", "allow-backup-object-storage-egress") not in identities
+    assert "smartenergy-backup" not in rendered_text()
 
 
 def test_public_ingress_tls_and_middleware_contract() -> None:

@@ -1,6 +1,6 @@
 # Architecture and Deployment Decisions
 
-Status: approved design for the hosted SmartEnergy deployment. The application-owned stateless, stateful, migration, backup, and restore package is implemented; Project 1 admission and live deployment remain future work.
+Status: implemented and validated for the hosted SmartEnergy portfolio/demo deployment. The application-owned stateless, stateful, and migration package is live through Project 1 GitOps.
 
 ## D1 — Versioned schema lifecycle
 
@@ -66,13 +66,13 @@ Status: approved design for the hosted SmartEnergy deployment. The application-o
 - **Trade-off:** Stateful packaging requires another image-specific test.
 - **Reconsider when:** A supported non-root image contract removes the uncertainty.
 
-## D9 — PostgreSQL backup contract
+## D9 — PostgreSQL recovery scope
 
-- **Decision:** Run daily off-node `pg_dump -Fc` backups, retaining seven daily and four weekly recovery points, and validate restore.
-- **Context:** A daily CronJob now creates a custom-format dump with the PostgreSQL 16 client and uploads it to S3-compatible HTTPS storage using a separate pinned curl image. A guarded restore Job template and admin script were exercised against a clean database.
-- **Reason:** Local-path storage is tied to one node and needs independently recoverable data.
-- **Trade-off:** The deployment needs storage credentials, retention handling, and restore exercises.
-- **Reconsider when:** Another low-cost mechanism proves equivalent off-node recovery and portability.
+- **Decision:** Keep off-node backup and disaster recovery outside the current portfolio/demo scope. Exclude the backup CronJob, object-storage egress, and backup Secret from production desired state.
+- **Context:** PostgreSQL uses a node-local PVC. Persistence across Pod restart is validated, but node or PVC loss has no recovery path. Experimental backup and guarded restore templates remain available for future work.
+- **Reason:** The project demonstrates application delivery and platform integration without adding another external service solely for the demo.
+- **Trade-off:** The deployment does not claim high availability or disaster-recovery completeness.
+- **Reconsider when:** The service needs recoverable user data or moves beyond portfolio/demo scope; then add real off-node storage, retention, monitored uploads, clean restore tests, and a recovery runbook.
 
 ## D10 — Initial public surface
 

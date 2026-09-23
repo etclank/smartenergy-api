@@ -55,9 +55,9 @@ This diagram describes the application today. The local Compose stack runs Postg
 
 `app/api/` contains routes and schemas, `app/models/` the database mappings, `app/core/` configuration and infrastructure, and `app/tasks/` background work. `scripts/` contains database initialization and seeding; `site/` contains the static dashboard. Tests live in `tests/`.
 
-Durable HTTP task endpoints enqueue Celery messages and return a task ID. A `202` means accepted by the broker, not completed. Explicit cache warmup remains best-effort work in the API process. Database migration, demo seeding and PostgreSQL backup are not task API operations.
+Durable HTTP task endpoints enqueue Celery messages and return a task ID. A `202` means accepted by the broker, not completed. Explicit cache warmup remains best-effort work in the API process. Database migration and demo seeding are not task API operations.
 
-The runtime separates the API, concurrency-1 Celery worker, and single Celery Beat scheduler. The production Kustomize package also defines PostgreSQL and Redis StatefulSets, a release migration Job, and daily off-node PostgreSQL backup. See the [architecture and deployment decisions](docs/architecture-deployment-decisions.md) for the stable design record.
+The runtime separates the API, concurrency-1 Celery worker, and single Celery Beat scheduler. The production Kustomize package also defines PostgreSQL and Redis StatefulSets and a release migration Job. See the [architecture and deployment decisions](docs/architecture-deployment-decisions.md) for the stable design record.
 
 ## Configuration
 
@@ -214,14 +214,15 @@ The same image can run on a Docker VM or a Kubernetes cluster. The dashboard is 
 
 - [Deployment guide](docs/deployment.md): image delivery, private dependencies, secrets, TLS, validation and rollback.
 - [Architecture decisions](docs/architecture-deployment-decisions.md): approved hosted design and conditions for revisiting it.
+- [Project 2 closeout](docs/project-2-closeout.md): validated portfolio scope and known operational limits.
 - [`deploy/compose.vm.yml`](deploy/compose.vm.yml): runtime-only VM configuration with an optional worker profile, a read-only filesystem and localhost HTTP binding.
 - [`deploy/kubernetes/base`](deploy/kubernetes/base): API, worker, Beat, migration, Service, and NetworkPolicy resources.
 - [`deploy/kubernetes/overlays/production`](deploy/kubernetes/overlays/production): digest-pinned production configuration, Ingress, Certificate, and Traefik middleware.
 - [Limitations](#limitations): current application and reliability boundaries.
 
-The VM example expects PostgreSQL, Redis, and backup operations to be provisioned separately. The Kubernetes production overlay owns their single-replica stateful resources and backup CronJob. The existing root `docker-compose.yml` remains the local development stack.
+The VM example expects PostgreSQL and Redis to be provisioned separately. The Kubernetes production overlay owns their single-replica stateful resources. The existing root `docker-compose.yml` remains the local development stack.
 
-SmartEnergy is ready for later onboarding to the Cloud-Native Service Control Plane through its GitOps/Kustomize application route. The application-owned package includes the stateless and stateful layers, but runtime Secrets, off-node object storage, the Project 1 `Application/smartenergy`, DNS, and live deployment are still pending. No SmartEnergy workload is deployed. Render it with `kubectl kustomize deploy/kubernetes/overlays/production`.
+Project 2 is complete for its portfolio/demo scope and is deployed through the Cloud-Native Service Control Plane at [energy.platform.eoghanclancy.eu](https://energy.platform.eoghanclancy.eu). The GitOps-managed package includes the stateless and stateful layers, immutable images, restricted Pod Security Admission settings, NetworkPolicies, TLS/Ingress, private Prometheus metrics, health probes, and a controlled migration and rollout sequence. PostgreSQL and Redis data both survived controlled Pod restarts. Render the desired state with `kubectl kustomize deploy/kubernetes/overlays/production`.
 
 ## Limitations
 
@@ -230,8 +231,8 @@ This project remains a demonstration application:
 - The production Ingress has a modest edge rate limit, but the application has no per-user rate limiting, token revocation, or tenant isolation.
 - No zero-downtime multi-version migration guarantee, broad pagination or concurrency guarantees for scheduled aggregates/seeding. Run one Beat scheduler.
 - Celery uses late acknowledgements, worker-lost rejection and prefetch 1. Delivery remains at-least-once-like and duplicate execution is possible; exactly-once is not claimed. Broad retries and arbitrary task time limits are intentionally absent.
-- The snapshot task supports local SQLite file copies only; it is not a consistent online-backup solution and does not back up PostgreSQL. Configure provider backups separately.
-- Kubernetes PostgreSQL and Redis each use one local-path replica. PVCs survive Pod replacement but remain tied to one node; PostgreSQL recovery depends on tested off-node backups, and Redis AOF does not provide exactly-once Celery delivery.
+- The snapshot task supports local SQLite file copies only; it is not a consistent online-backup solution and does not back up PostgreSQL.
+- Kubernetes PostgreSQL and Redis each use one local-path replica. PVCs survive Pod replacement but remain tied to one node. Pod-restart persistence is validated, but node or PVC loss recovery is not implemented. Off-node backup and disaster recovery are intentionally outside the portfolio scope; the system does not claim HA or disaster-recovery completeness. Redis AOF does not provide exactly-once Celery delivery.
 - Recorded system metrics remain public for the current dashboard, while Prometheus metrics are private on TCP 9090. Metrics persistence failures can be tolerated silently; do not treat them as an availability guarantee.
 - Some tests share fixture data; deprecation warnings remain in the existing date/time and client code. Managed-service integration and load testing are outside the unit suite.
 - Dependencies are locked for reproducibility; that is not a vulnerability-free guarantee. Update and audit them before deployment.
