@@ -36,7 +36,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: worker
-          image: ghcr.io/etclank/smartenergy-api@sha256:b9ed2c1be78d707f234df14e08679204a5249def787d0b8e26f398cce41e415f
+          image: ghcr.io/etclank/smartenergy-api@sha256:0d13398c342931d23d726b4db1903508272e45fefc27687f9cfe311798a4e363
           imagePullPolicy: IfNotPresent
           envFrom:
             - configMapRef:

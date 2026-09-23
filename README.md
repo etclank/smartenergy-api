@@ -206,7 +206,7 @@ docker run --rm --name smartenergy-sqlite -p 127.0.0.1:8000:8000 \
 
 The digest-pinned multi-stage image runs as UID/GID 10001 and contains no compiler, Poetry, or PostgreSQL client. The same artifact runs the API, worker, Beat, and explicit Alembic migrations. In `ENV=prod`, all roles log structured JSON to stdout/stderr and create no log directory. Beat keeps non-authoritative schedule state under `/tmp`, so the hosted roles support a read-only root filesystem with writable temporary storage. Local SQLite data and manually requested SQLite snapshots remain development-only. `docker compose down` preserves PostgreSQL data; adding `-v` deletes it.
 
-The first platform release uses image source revision `3e39c1e66c15f276aeb88fa5c4d322ec301870e2` and consumes it as `ghcr.io/etclank/smartenergy-api@sha256:b9ed2c1be78d707f234df14e08679204a5249def787d0b8e26f398cce41e415f`. The package is public and has registry SBOM and provenance attestations. The [release record](docs/releases/first-platform-release.md) distinguishes this image source revision from the later deployment revision that pins it.
+The first platform release uses image source revision `5961af5ce36d3aed2fa81ac85da107627e9b2f35` and consumes it as `ghcr.io/etclank/smartenergy-api@sha256:0d13398c342931d23d726b4db1903508272e45fefc27687f9cfe311798a4e363`. The package is public and has registry SBOM and provenance attestations. The [release record](docs/releases/first-platform-release.md) distinguishes this image source revision from the later deployment revision that pins it.
 
 ## VM and Kubernetes deployment
 

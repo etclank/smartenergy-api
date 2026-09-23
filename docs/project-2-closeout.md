@@ -3,7 +3,7 @@
 **Project status:** COMPLETE — PORTFOLIO/DEMO SCOPE  
 **Live hostname:** `energy.platform.eoghanclancy.eu`  
 **SmartEnergy deployment revision:** The immutable SmartEnergy Git commit containing this closeout record and production overlay. Its exact SHA is pinned externally by Project 1's `Application/smartenergy`.  
-**Runtime image digest:** `sha256:b9ed2c1be78d707f234df14e08679204a5249def787d0b8e26f398cce41e415f`  
+**Runtime image digest:** `sha256:0d13398c342931d23d726b4db1903508272e45fefc27687f9cfe311798a4e363`<br>
 **Platform:** existing approximately 4 GiB Hetzner single-node K3s VM  
 **Final observed node memory:** approximately 75%, with MemoryPressure, DiskPressure, and PIDPressure false
 

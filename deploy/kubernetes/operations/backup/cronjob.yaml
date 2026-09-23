@@ -72,7 +72,7 @@ spec:
                       name: smartenergy-postgres
                       key: POSTGRES_PASSWORD
                 - name: IMAGE_SOURCE_REVISION
-                  value: 3e39c1e66c15f276aeb88fa5c4d322ec301870e2
+                  value: 5961af5ce36d3aed2fa81ac85da107627e9b2f35
               resources:
                 requests:
                   cpu: 25m
